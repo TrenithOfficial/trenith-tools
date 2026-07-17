@@ -91,6 +91,22 @@ export async function joinAudioFiles(files: File[], progress: ProgressHandler) {
   }
 }
 
+export async function convertAudioFileToWav(file: File, progress: ProgressHandler) {
+  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) throw new Error("This browser does not support local audio processing.");
+  const context = new AudioContextClass({ sampleRate: 44_100 });
+  try {
+    progress(18, `Reading ${file.name}`);
+    const decoded = await context.decodeAudioData(await file.arrayBuffer());
+    progress(72, "Encoding lossless WAV");
+    const blob = audioBufferToWav(decoded);
+    progress(100, "Conversion complete");
+    return { blob, filename: `${safeStem(file.name)}.wav` };
+  } finally {
+    await context.close();
+  }
+}
+
 function waitForMedia(video: HTMLVideoElement, event: "loadedmetadata" | "ended") {
   return new Promise<void>((resolve, reject) => {
     const done = () => { cleanup(); resolve(); };

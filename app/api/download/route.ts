@@ -9,14 +9,31 @@ function isPrivateHost(hostname: string) {
   return host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "::" || host === "::1" || host === "0.0.0.0" || host.startsWith("::ffff:") || /^f[cd][0-9a-f]{2}:/i.test(host) || /^fe[89ab][0-9a-f]:/i.test(host) || /^127\.|^10\.|^192\.168\.|^169\.254\.|^100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) || (() => { const match = host.match(/^172\.(\d+)\./); return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31); })();
 }
 
+function validateAudioUrl(input: string) {
+  const url = new URL(input);
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || isPrivateHost(url.hostname) || (url.port && !["80", "443"].includes(url.port)) || !AUDIO_PATTERN.test(url.pathname + url.search)) throw new Error("Unsupported audio URL.");
+  return url;
+}
+
+async function fetchPublicAudio(initial: URL) {
+  let current = initial;
+  for (let redirects = 0; redirects <= 5; redirects += 1) {
+    const response = await fetch(current.href, { redirect: "manual", headers: { "User-Agent": "TrenithToolsAudioDownloader/1.0 (+https://trenith.com)" } });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get("location");
+    if (!location) throw new Error("The audio source returned an invalid redirect.");
+    current = validateAudioUrl(new URL(location, current).href);
+  }
+  throw new Error("The audio source returned too many redirects.");
+}
+
 export async function GET(request: NextRequest) {
   try {
     const input = request.nextUrl.searchParams.get("url");
     if (!input) throw new Error("Missing audio URL.");
-    const url = new URL(input);
-    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || isPrivateHost(url.hostname) || (url.port && !["80", "443"].includes(url.port)) || !AUDIO_PATTERN.test(url.pathname + url.search)) throw new Error("Unsupported audio URL.");
+    const url = validateAudioUrl(input);
 
-    const response = await fetch(url.href, { redirect: "follow", headers: { "User-Agent": "TrenithToolsAudioDownloader/1.0 (+https://trenith.com)" } });
+    const response = await fetchPublicAudio(url);
     if (!response.ok || !response.body) throw new Error("The audio source is unavailable.");
     const finalUrl = new URL(response.url || url.href);
     if (isPrivateHost(finalUrl.hostname)) throw new Error("The audio source redirected to a private address.");

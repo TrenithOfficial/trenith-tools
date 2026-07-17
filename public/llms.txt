@@ -1,0 +1,22 @@
+# Trenith Tools
+
+> Free browser-based media, PDF, image, music and BYOK AI utilities built by Trenith Technologies Pvt Ltd.
+
+## Canonical pages
+- / — platform overview and FAQs
+- /tools — complete searchable tool directory
+- /connections — session-first and optional encrypted BYOK connection vault
+- /studio — AI provider request workspace
+- /about — company and authorship
+- /privacy — file, URL and key handling
+- /terms — responsible-use terms
+
+## Capability labels
+- Processed on your device: source files stay in the visitor's browser for the operation.
+- Public web source: a server route inspects an authorized public URL for exposed audio links.
+- Uses your API key: the visitor connects an external provider account; provider terms, quotas and charges apply.
+
+## Important limits
+- There is no artificial Trenith file-count limit, but device memory, storage and browser codec support remain practical limits.
+- The public source scanner does not bypass authentication, DRM or platform access controls.
+- Trenith does not bundle AI credits or promise that every third-party provider supports every workflow.

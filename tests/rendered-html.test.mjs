@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const developmentPreviewMeta =
@@ -21,7 +22,37 @@ test("renders the Trenith product shell and preview metadata", async () => {
   assert.match(html, developmentPreviewMeta);
   assert.match(html, /Trenith/);
   assert.match(html, /Audio Joiner/);
-  assert.match(html, /PDF workspace|PDF/);
+  assert.match(html, /Every file tool/);
+  assert.match(html, /Processed on your device/);
+  assert.doesNotMatch(html, /Choose Pro|Choose Studio|monthly credits/i);
+});
+
+for (const [path, expected] of [
+  ["/tools", /complete tool directory/i],
+  ["/tools/audio-joiner", /Choose a complete folder/i],
+  ["/connections", /Connections Vault/i],
+  ["/studio", /AI Studio/i],
+  ["/about", /Trenith Technologies Pvt Ltd/i],
+  ["/privacy", /Device-processed files/i],
+  ["/terms", /Use the tools responsibly/i],
+]) {
+  test(`renders ${path}`, async () => {
+    const response = await worker.fetch(new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }), environment, context);
+    const html = await response.text();
+    assert.equal(response.status, 200);
+    assert.match(html, expected);
+  });
+}
+
+test("publishes crawl and answer-engine discovery files", async () => {
+  const robots = await worker.fetch(new Request("http://localhost/robots.txt"), environment, context);
+  assert.equal(robots.status, 200);
+  assert.match(await robots.text(), /Sitemap: https:\/\/trenith-tools\.vercel\.app\/sitemap\.xml/);
+  const sitemap = await worker.fetch(new Request("http://localhost/sitemap.xml"), environment, context);
+  assert.equal(sitemap.status, 200);
+  assert.match(await sitemap.text(), /\/tools\/audio-joiner/);
+  const llms = await readFile(new URL("../public/llms.txt", import.meta.url), "utf8");
+  assert.match(llms, /Capability labels/);
 });
 
 test("blocks private-network URL scanning", async () => {

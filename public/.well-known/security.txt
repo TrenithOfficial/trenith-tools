@@ -1,0 +1,5 @@
+Contact: mailto:contact@trenith.com
+Canonical: https://trenith.com/.well-known/security.txt
+Preferred-Languages: en
+Policy: https://trenith.com/privacy
+Expires: 2027-07-17T00:00:00.000Z

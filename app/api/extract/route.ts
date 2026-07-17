@@ -27,6 +27,18 @@ function validatePublicUrl(input: string) {
   return url;
 }
 
+async function fetchPublicUrl(initial: URL, init: RequestInit) {
+  let current = initial;
+  for (let redirects = 0; redirects <= 5; redirects += 1) {
+    const response = await fetch(current.href, { ...init, redirect: "manual" });
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get("location");
+    if (!location) throw new Error("The source returned an invalid redirect.");
+    current = validatePublicUrl(new URL(location, current).href);
+  }
+  throw new Error("The source returned too many redirects.");
+}
+
 function decodeHtml(value: string) {
   return value
     .replace(/&amp;/gi, "&")
@@ -80,8 +92,7 @@ export async function POST(request: NextRequest) {
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15_000);
-    const response = await fetch(target.href, {
-      redirect: "follow",
+    const response = await fetchPublicUrl(target, {
       signal: controller.signal,
       headers: { "User-Agent": "TrenithToolsAudioScanner/1.0 (+public-media-discovery; https://trenith.com)" },
     });
