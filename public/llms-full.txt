@@ -8,7 +8,11 @@ The platform contains three kinds of workflow. Device tools use browser APIs or 
 
 The metadata remover accepts files and folders, inventories recognized metadata, removes supported fields, rescans the output and offers individual or ZIP downloads. Supported families include common image, camera RAW, audio, video, document, PDF, archive, ebook and vector formats that the embedded ExifTool engine can safely write. It does not promise removal of visible content, steganography, proprietary databases or every application-specific trace.
 
-The audio joiner accepts files and folders in a user-controlled order. Smaller compatible jobs are joined in memory. Jobs over the defined file-count or size threshold use a compatible desktop File System Access API, preflight files independently, report unreadable names, optionally skip unreadable files, and stream PCM output directly to a WAV or RF64-compatible destination. There is no artificial file-count quota, but disk space, browser support and codecs remain practical constraints.
+The audio joiner accepts files and folders in a user-controlled order. It first uses native browser decoding and automatically retries rejected files with a locally loaded FFmpeg WebAssembly compatibility engine. Smaller compatible jobs are joined in memory. Jobs over the defined file-count or size threshold use a compatible desktop File System Access API, preflight files independently, report unreadable names, optionally skip unreadable files, and stream PCM output directly to a WAV or RF64-compatible destination. There is no artificial file-count quota, but disk space, browser support and codecs remain practical constraints.
+
+The audio converter produces MP3, WAV, FLAC, Ogg Vorbis, Opus and M4A/AAC output on the device. Audio trimming and volume adjustment produce lossless WAV output. The public audio scanner can package discovered authorized files into a ZIP without bypassing source controls.
+
+The public `/status` page explains the engine and dependency for every workspace. `/changelog` and `/feed.xml` publish release history, and `/api/tools` exposes a CORS-readable JSON catalog.
 
 Trenith Tools is free. Revenue can come from Trenith service inquiries, clearly disclosed contextual sponsorship or affiliate relationships, and consented aggregate analytics or campaign measurement. Trenith does not sell personal data or use file contents, private metadata, API keys, prompts or outputs for advertising.
 

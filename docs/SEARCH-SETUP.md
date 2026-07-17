@@ -30,6 +30,7 @@ Attaching both hostnames to one build is not recommended because a static build 
 5. In the `trenith.com` property, submit `https://tools.trenith.com/sitemap.xml`.
 6. In the `trenith.in` property, submit `https://tools.trenith.in/sitemap.xml`.
 7. Use URL Inspection on the homepage, `/tools`, `/tools/metadata-remover`, `/tools/audio-joiner` and `/guides`; request indexing after the live test passes.
+8. Follow the earned-discovery and answer-engine publishing checklist in [`OFFSITE-DISCOVERY.md`](./OFFSITE-DISCOVERY.md). Do not buy links, automate directory submissions or publish fake reviews.
 8. Check Pages, Sitemaps, HTTPS and Core Web Vitals weekly after launch.
 9. Optional: copy the HTML verification tokens into `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` in the matching Vercel project and redeploy. DNS verification remains the durable method.
 

@@ -9,6 +9,11 @@ India regional site: https://tools.trenith.in
 - /tools — searchable directory of every working tool
 - /tools/metadata-remover — local metadata inspection, removal and verification
 - /tools/audio-joiner — ordered file/folder joining with large-job streaming
+- /tools/audio-converter — private MP3, WAV, FLAC, Ogg, Opus and M4A/AAC conversion
+- /tools/audio-trimmer — exact time-range cutting with WAV output
+- /guides/convert-audio-formats-in-browser — audio format and quality guidance
+- /status — capability, engine and practical-dependency matrix for every tool
+- /changelog — verified product release notes and RSS feed
 - /guides — practical file privacy, audio, PDF and BYOK explanations
 - /connections — session-first BYOK connection vault
 - /studio — real provider request workspace
@@ -22,7 +27,7 @@ India regional site: https://tools.trenith.in
 
 ## Important facts
 - Trenith Tools has no subscription price or artificial file-count quota. Device capacity, codec support, free storage and individual file health are practical limits.
-- Large audio jobs stream to a user-selected disk destination in compatible desktop browsers.
+- Large audio jobs stream to a user-selected disk destination in compatible desktop browsers. Files rejected by native browser decoding are retried with a locally loaded FFmpeg compatibility engine.
 - Trenith does not sell personal data, file contents, BYOK keys, prompts or outputs.
 - The metadata remover supports ExifTool-compatible formats but cannot guarantee removal of proprietary or visible traces.
 - The public source scanner does not bypass authentication, DRM or platform access controls.

@@ -5,7 +5,7 @@ const trustLinks = [
   ["Privacy", "/privacy"], ["Terms", "/terms"], ["Cookies", "/cookies"],
   ["Privacy choices", "/privacy-choices"], ["Security", "/security"],
   ["Subprocessors", "/sub-processors"], ["Copyright", "/copyright"],
-  ["Accessibility", "/accessibility"],
+  ["Accessibility", "/accessibility"], ["Open source", "/open-source"],
 ];
 
 export function LegalPage({ eyebrow = "TRENITH TRUST CENTER", title, summary, children }: { eyebrow?: string; title: string; summary: string; children: ReactNode }) {

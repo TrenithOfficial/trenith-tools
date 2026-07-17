@@ -9,7 +9,7 @@ import { openPrivacySettings } from "./consent-manager";
 const navigation = [
   ["Home", "/"],
   ["All Tools", "/tools"],
-  ["Privacy", "/tools?category=Privacy"],
+  ["Status", "/status"],
   ["Audio", "/tools?category=Audio"],
   ["Guides", "/guides"],
   ["AI", "/studio"],
@@ -85,8 +85,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <p>Free media, document and AI-connected utilities built by Trenith Technologies Pvt Ltd.</p>
           </div>
           <div className="footer-column"><strong>Tools</strong><Link href="/tools/metadata-remover">Metadata remover</Link><Link href="/tools?category=Audio">Audio</Link><Link href="/tools?category=Video">Video</Link><Link href="/tools?category=PDF">PDF</Link><Link href="/tools?category=Image">Images</Link></div>
-          <div className="footer-column"><strong>Platform</strong><Link href="/studio">AI Studio</Link><Link href="/connections">BYOK Connections</Link><Link href="/guides">Guides</Link><Link href="/about">About Trenith</Link><a href="https://www.trenith.com/contact?utm_source=trenith_tools&utm_medium=product&utm_campaign=footer" target="_blank" rel="noreferrer">Build with Trenith ↗</a></div>
-          <div className="footer-column"><strong>Trust</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/cookies">Cookies</Link><button className="footer-settings" onClick={openPrivacySettings}>Privacy settings</button><Link href="/privacy-choices">Privacy choices</Link><Link href="/security">Security</Link><Link href="/sub-processors">Subprocessors</Link><Link href="/copyright">Copyright</Link><Link href="/accessibility">Accessibility</Link></div>
+          <div className="footer-column"><strong>Platform</strong><Link href="/status">Tool status</Link><Link href="/changelog">Changelog</Link><Link href="/studio">AI Studio</Link><Link href="/connections">BYOK Connections</Link><Link href="/guides">Guides</Link><Link href="/about">About Trenith</Link><a href="https://www.trenith.com/contact?utm_source=trenith_tools&utm_medium=product&utm_campaign=footer" target="_blank" rel="noreferrer">Build with Trenith ↗</a></div>
+          <div className="footer-column"><strong>Trust</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/cookies">Cookies</Link><button className="footer-settings" onClick={openPrivacySettings}>Privacy settings</button><Link href="/privacy-choices">Privacy choices</Link><Link href="/security">Security</Link><Link href="/sub-processors">Subprocessors</Link><Link href="/open-source">Open-source notices</Link><Link href="/copyright">Copyright</Link><Link href="/accessibility">Accessibility</Link></div>
         </div>
         <div className="footer-bottom"><span>© 2026 Trenith Technologies Pvt Ltd</span><span>Co-authored by Sai Phanindra Manikanta Yalamanchili</span></div>
       </footer>

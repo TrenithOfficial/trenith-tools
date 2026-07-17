@@ -13,6 +13,16 @@ const faqs = [
   ["Can every visible tool be opened?", "Yes. Device tools open a complete local workspace. Public-link tools open the URL scanner. Provider-dependent tools open the BYOK Studio with connection requirements and an API runner."],
 ];
 
+const categoryShowcase = [
+  { name: "Privacy", icon: "⌫", copy: "Inspect and remove hidden file data before you share.", tools: ["metadata-remover"] },
+  { name: "Audio", icon: "♪", copy: "Download, convert, cut, adjust and join audio locally.", tools: ["audio-converter", "audio-joiner", "audio-trimmer"] },
+  { name: "Video", icon: "▶", copy: "Combine compatible clips and complete folders in order.", tools: ["video-joiner"] },
+  { name: "PDF", icon: "PDF", copy: "Merge, split, organize, rotate, number and watermark PDFs.", tools: ["merge-pdf", "split-pdf", "organize-pdf"] },
+  { name: "Image", icon: "◫", copy: "Compress, resize and convert common image formats.", tools: ["image-compressor", "image-resizer", "image-converter"] },
+  { name: "Music", icon: "♩", copy: "Fast calculators and practice tools for musicians.", tools: ["tap-bpm", "bpm-delay-calculator", "metronome"] },
+  { name: "AI Studio", icon: "✦", copy: "Run clear workflows with provider keys you control.", tools: ["ai-chat", "text-to-speech", "seo-brief-generator"] },
+] as const;
+
 export default function Home() {
   const structuredData = [
     {
@@ -97,8 +107,14 @@ export default function Home() {
       <section className="category-showcase page-frame">
         <div className="section-title-row"><div><span className="section-number">02</span><h2>One system, every workflow</h2></div><p>Each category has dedicated tool pages, support notes, formats and a real action surface.</p></div>
         <div className="category-orbit">
-          {["Privacy", "Audio", "Video", "PDF", "Image", "Music", "AI Studio"].map((category, index) => (
-            <Link key={category} href={`/tools?category=${encodeURIComponent(category)}`}><span>0{index + 1}</span><h3>{category}</h3><p>{tools.filter((tool) => tool.category === category).length} tools</p><b>↗</b></Link>
+          {categoryShowcase.map((category, index) => (
+            <article key={category.name}>
+              <div className="category-card-head"><span>0{index + 1}</span><i>{category.icon}</i></div>
+              <h3><Link href={`/tools?category=${encodeURIComponent(category.name)}`}>{category.name}</Link></h3>
+              <p>{category.copy}</p>
+              <div className="category-tool-links">{category.tools.map((slug) => <Link key={slug} href={`/tools/${slug}`}>{tools.find((tool) => tool.slug === slug)?.shortName}<span>↗</span></Link>)}</div>
+              <footer><strong>{tools.filter((tool) => tool.category === category.name).length} verified workspaces</strong><Link href={`/tools?category=${encodeURIComponent(category.name)}`}>View all <span>→</span></Link></footer>
+            </article>
           ))}
         </div>
       </section>

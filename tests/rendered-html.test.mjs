@@ -27,11 +27,14 @@ test("renders the Trenith product shell without third-party builder branding", a
 for (const [path, expected] of [
   ["/tools", /complete tool directory/i],
   ["/tools/audio-joiner", /Choose a complete folder/i],
+  ["/tools/audio-converter", /MP3.*WAV.*FLAC/i],
+  ["/tools/audio-trimmer", /start and end time/i],
   ["/connections", /Connections Vault/i],
   ["/studio", /AI Studio/i],
   ["/about", /Trenith Technologies Private Limited/i],
   ["/tools/metadata-remover", /Inspect first. Remove second/i],
   ["/guides", /Practical answers/i],
+  ["/guides/convert-audio-formats-in-browser", /Lossless or lossy/i],
   ["/guides/remove-metadata-from-any-file", /What metadata can reveal/i],
   ["/privacy", /Trenith does not sell personal data/i],
   ["/terms", /Free tools. Clear responsibilities/i],
@@ -39,6 +42,9 @@ for (const [path, expected] of [
   ["/privacy-choices", /Your privacy choices/i],
   ["/security", /Device-first by architecture/i],
   ["/sub-processors", /A limited provider chain/i],
+  ["/status", /Know what works/i],
+  ["/changelog", /Shipped work/i],
+  ["/open-source", /FFmpeg WebAssembly/i],
 ]) {
   test(`renders ${path}`, async () => {
     const response = await worker.fetch(new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }), environment, context);
@@ -61,6 +67,31 @@ test("publishes crawl and answer-engine discovery files", async () => {
   const llms = await readFile(new URL("../public/llms.txt", import.meta.url), "utf8");
   assert.match(llms, /Capability labels/);
   assert.match(llms, /Trenith does not sell personal data/i);
+});
+
+test("publishes machine-readable tool and release discovery", async () => {
+  const catalog = await worker.fetch(new Request("http://localhost/api/tools"), environment, context);
+  assert.equal(catalog.status, 200);
+  const data = await catalog.json();
+  assert.equal(data.count, 42);
+  assert.ok(data.tools.some((tool) => tool.slug === "audio-converter" && /FLAC/.test(tool.description)));
+  const feed = await worker.fetch(new Request("http://localhost/feed.xml"), environment, context);
+  assert.equal(feed.status, 200);
+  assert.match(feed.headers.get("content-type") || "", /application\/rss\+xml/);
+  assert.match(await feed.text(), /Verified media and workflow release/);
+});
+
+test("every published tool has a working, titled HTML route", async () => {
+  const catalogResponse = await worker.fetch(new Request("http://localhost/api/tools"), environment, context);
+  const { tools } = await catalogResponse.json();
+  assert.equal(tools.length, 42);
+  for (const tool of tools) {
+    const response = await worker.fetch(new Request(`http://localhost/tools/${tool.slug}`, { headers: { accept: "text/html" } }), environment, context);
+    const html = await response.text();
+    assert.equal(response.status, 200, `${tool.slug} did not return 200`);
+    assert.match(html, /<h1[^>]*>/i, `${tool.slug} is missing an H1`);
+    assert.ok(html.toLowerCase().includes(tool.name.toLowerCase()), `${tool.slug} is missing its tool name`);
+  }
 });
 
 test("blocks private-network URL scanning", async () => {

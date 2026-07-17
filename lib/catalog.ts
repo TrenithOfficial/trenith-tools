@@ -31,9 +31,19 @@ export const tools: ToolDefinition[] = [
     steps: ["Choose files or an audio folder", "Reorder or remove tracks", "Join and download one WAV"],
   },
   {
-    slug: "audio-converter", name: "Audio to WAV Converter", shortName: "Audio Converter", category: "Audio", kind: "device", icon: "↻", accent: "amber",
-    description: "Decode a browser-compatible audio file and export an uncompressed WAV without uploading it.", formats: ["MP3", "M4A", "AAC", "OGG", "FLAC", "OPUS", "WebM", "WAV"],
-    steps: ["Choose an audio file", "Decode it in your browser", "Download a lossless WAV"],
+    slug: "audio-converter", name: "Audio Format Converter", shortName: "Audio Converter", category: "Audio", kind: "device", icon: "↻", accent: "amber",
+    description: "Convert audio between MP3, WAV, FLAC, Ogg Vorbis, Opus and M4A/AAC with a private in-browser media engine.", formats: ["MP3", "WAV", "FLAC", "OGG", "OPUS", "M4A", "AAC", "WebM", "AIFF"],
+    steps: ["Choose an audio file", "Select the output format and bitrate", "Convert, preview and download"],
+  },
+  {
+    slug: "audio-trimmer", name: "Audio Trimmer & Cutter", shortName: "Audio Trimmer", category: "Audio", kind: "device", icon: "✂", accent: "rose",
+    description: "Cut an exact time range from an audio file and export a lossless WAV without uploading the recording.", formats: ["MP3", "WAV", "FLAC", "OGG", "OPUS", "M4A", "AAC", "WebM", "AIFF"],
+    steps: ["Choose an audio file", "Set the start and end time", "Create, preview and download the trimmed WAV"],
+  },
+  {
+    slug: "audio-volume-changer", name: "Audio Volume Changer", shortName: "Volume Changer", category: "Audio", kind: "device", icon: "◒", accent: "lime",
+    description: "Reduce, mute or amplify audio up to 400% and export a lossless WAV locally in your browser.", formats: ["MP3", "WAV", "FLAC", "OGG", "OPUS", "M4A", "AAC", "WebM", "AIFF"],
+    steps: ["Choose an audio file", "Set the output volume", "Create, preview and download the adjusted WAV"],
   },
   {
     slug: "video-joiner", name: "Video Joiner", shortName: "Video Joiner", category: "Video", kind: "device", icon: "▶", accent: "cyan",
@@ -218,7 +228,7 @@ export const tools: ToolDefinition[] = [
 ];
 
 export const toolBySlug = Object.fromEntries(tools.map((tool) => [tool.slug, tool])) as Record<string, ToolDefinition>;
-export const quickToolSlugs = ["metadata-remover", "audio-downloader", "audio-joiner", "video-joiner", "merge-pdf", "image-converter"];
+export const quickToolSlugs = ["metadata-remover", "audio-downloader", "audio-converter", "audio-joiner", "merge-pdf", "image-converter"];
 export const quickTools = quickToolSlugs.map((slug) => toolBySlug[slug]);
 export const categories: Array<"All" | ToolCategory> = ["All", "Privacy", "Audio", "Video", "PDF", "Image", "Music", "AI Studio"];
 

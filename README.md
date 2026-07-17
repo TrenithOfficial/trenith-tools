@@ -6,16 +6,19 @@ A free, light-first, device-focused workspace for file privacy, media, PDFs, ima
 
 - Public audio discovery and authorized direct downloads
 - Metadata inspection, removal, verification and ZIP export for ExifTool-compatible file families
-- Audio folder/file joining with per-file validation and direct-to-disk WAV/RF64 streaming for large jobs
+- Audio folder/file joining with native decoding, FFmpeg compatibility fallback and direct-to-disk WAV/RF64 streaming for large jobs
+- True MP3, WAV, FLAC, Ogg Vorbis, Opus and M4A/AAC conversion with preview and explicit download
+- Audio trimming and 0–400% volume adjustment with lossless WAV output
+- Public audio discovery with individual or batch ZIP downloads
 - Video folder/file joining with browser-native WebM export
 - PDF merge, split-to-ZIP, page extraction, rotation, page numbers, watermarking and structural optimization
 - JPG/PNG to PDF
 - Image resize, compression and JPG/PNG/WebP conversion
-- Searchable privacy, audio, video, PDF, image, music and AI directory with 40 dedicated tool pages
+- Searchable privacy, audio, video, PDF, image, music and AI directory with 42 dedicated tool pages
 - Free BYOK Connections Vault and AI Studio for OpenAI, Anthropic, Gemini, ElevenLabs, OpenRouter and compatible endpoints
 - Compatible endpoint media jobs support JSON briefs and multipart source-file uploads
 - Consent-gated Vercel/Google analytics and marketing measurement with Global Privacy Control support
-- Global and India canonicals/hreflang, structured data, localized sitemaps, robots, web manifest, guides, `llms.txt` and `llms-full.txt`
+- Global and India canonicals/hreflang, structured data, localized sitemaps, robots, web manifest, guides, capability status, changelog/RSS, a public tool catalog API, `llms.txt` and `llms-full.txt`
 - Global privacy, terms, cookie, privacy choices, security, subprocessors, copyright and accessibility disclosures
 
 Core file tools process source files in the browser. There is no arbitrary application-level file-count limit; usable capacity depends on the device, browser memory and browser codec support.
@@ -57,7 +60,9 @@ Optional runtime configuration:
 | `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | Optional Search Console HTML meta verification |
 | `NEXT_PUBLIC_BING_SITE_VERIFICATION` | Optional Bing HTML meta verification |
 
-See [`docs/SEARCH-SETUP.md`](docs/SEARCH-SETUP.md) for the domain, Search Console, Bing, IndexNow and analytics launch sequence.
+See [`docs/SEARCH-SETUP.md`](docs/SEARCH-SETUP.md) for the domain, Search Console, Bing, IndexNow and analytics launch sequence. See [`docs/OFFSITE-DISCOVERY.md`](docs/OFFSITE-DISCOVERY.md) for the compliant off-site SEO/AEO/GEO/AIO distribution plan.
+
+Public discovery surfaces: [`/status`](https://tools.trenith.com/status), [`/changelog`](https://tools.trenith.com/changelog), [`/feed.xml`](https://tools.trenith.com/feed.xml), and [`/api/tools`](https://tools.trenith.com/api/tools).
 
 ## Responsible media use
 

@@ -41,4 +41,6 @@ next-env.d.ts
 /outputs/
 /work/
 /public/zeroperl.wasm
+/public/ffmpeg/
+/tsconfig.tsbuildinfo
 /tsconfig.next.tsbuildinfo

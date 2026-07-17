@@ -10,6 +10,19 @@ export type Guide = {
 
 export const guides: Guide[] = [
   {
+    slug: "convert-audio-formats-in-browser",
+    title: "How to convert audio between MP3, WAV, FLAC, Ogg, Opus and M4A",
+    description: "Choose the right audio format and convert it locally in your browser without uploading the source file.",
+    answer: "Choose an output format based on compatibility and quality, add one audio file, select a bitrate for lossy formats, then convert and preview the result. Trenith Tools supports MP3, WAV, FLAC, Ogg Vorbis, Opus and M4A/AAC output through a local FFmpeg WebAssembly engine.",
+    tool: "audio-converter",
+    steps: ["Choose the source audio and an output format.", "Set a bitrate when converting to MP3, Ogg, Opus or M4A.", "Convert locally, preview the result and download the new file."],
+    sections: [
+      { heading: "Lossless or lossy", body: "WAV and FLAC preserve the decoded audio without another lossy encoding step. MP3, AAC, Ogg Vorbis and Opus trade some information for much smaller files. Converting one lossy format to another cannot restore quality that was already removed." },
+      { heading: "Which format should you choose", body: "MP3 has the broadest legacy compatibility. M4A/AAC is common on phones and video platforms. Opus is efficient for speech and modern web use. Ogg Vorbis is open and widely supported. FLAC is useful for lossless archives, while WAV is simple and editor-friendly but large." },
+      { heading: "What happens on first use", body: "The browser downloads the conversion engine on the first conversion and then processes the source on the device. Browser memory, codec support and available storage still set practical limits, so keep the original until the converted file has been checked." },
+    ],
+  },
+  {
     slug: "remove-metadata-from-any-file",
     title: "How to remove metadata before sharing a file",
     description: "Inspect and remove EXIF, GPS, author, device and document metadata locally before a file is shared.",

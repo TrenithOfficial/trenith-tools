@@ -12,7 +12,7 @@ const workflowPrompts: Record<string, string> = {
   "cover-remix": "Create a legally safe remix plan for material I own or am authorized to use. Describe structure, tempo, sound design and mix decisions without copying a protected recording.",
   "stem-separator": "Explain the best stem-separation workflow for the described recording and return a concise, ordered processing plan.",
   "text-to-speech": "Read the following text naturally:",
-  "voice-conversion": "Create a voice-conversion direction sheet using a voice I own or have permission to use. Include tone, pacing, articulation and safety checks.",
+  "voice-converter": "Create a voice-conversion direction sheet using a voice I own or have permission to use. Include tone, pacing, articulation and safety checks.",
   "audio-to-midi": "Describe a precise audio-to-MIDI transcription plan for the supplied musical description, including tempo, pitch range, quantization and cleanup.",
   "audio-cleanup": "Create a repair chain for the described audio problem. Include noise reduction, de-click, EQ, dynamics and loudness targets.",
   "pdf-summarizer": "Summarize the following document content. Return key findings, decisions, risks and next actions:",
@@ -31,10 +31,10 @@ const workflowPrompts: Record<string, string> = {
 
 type StudioResult = { kind: "text"; text: string } | { kind: "file"; url: string; name: string; mime: string };
 
-const fileWorkflows = new Set(["cover-remix", "stem-separator", "voice-conversion", "audio-to-midi", "audio-cleanup", "ocr-pdf", "office-converter"]);
+const fileWorkflows = new Set(["cover-remix", "stem-separator", "voice-converter", "audio-to-midi", "audio-cleanup", "ocr-pdf", "office-converter"]);
 const compatibleOnlyWorkflows = new Set(["ai-song-generator", "ai-vocal-generator", ...fileWorkflows]);
 const workflowAccept: Record<string, string> = {
-  "cover-remix": "audio/*", "stem-separator": "audio/*", "voice-conversion": "audio/*",
+  "cover-remix": "audio/*", "stem-separator": "audio/*", "voice-converter": "audio/*",
   "audio-to-midi": "audio/*", "audio-cleanup": "audio/*", "ocr-pdf": "image/*,application/pdf",
   "office-converter": ".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.odt,.ods,.odp",
 };

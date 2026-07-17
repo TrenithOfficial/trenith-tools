@@ -1,5 +1,7 @@
 "use client";
 
+import { decodeAudioWithFallback } from "./audio-transcode.ts";
+
 export type ProgressHandler = (percent: number, message: string) => void;
 export type AudioJoinOptions = { skipUnreadable?: boolean };
 export type AudioJoinResult = { blob?: Blob; filename: string; savedToDisk?: boolean; warnings: string[] };
@@ -28,7 +30,7 @@ function safeStem(name: string) {
   return name.replace(/\.[^.]+$/, "").replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "") || "trenith-output";
 }
 
-function audioBufferToWav(buffer: AudioBuffer) {
+export function audioBufferToWav(buffer: AudioBuffer) {
   const channels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
   const bytesPerSample = 2;
@@ -65,6 +67,19 @@ function audioBufferToWav(buffer: AudioBuffer) {
   }
 
   return new Blob([arrayBuffer], { type: "audio/wav" });
+}
+
+async function decodeAudioFile(context: AudioContext, file: File, compatibilityProgress?: (message: string) => void) {
+  try {
+    return await context.decodeAudioData(await file.arrayBuffer());
+  } catch {
+    const wav = await decodeAudioWithFallback(file, compatibilityProgress);
+    try {
+      return await context.decodeAudioData(wav.slice(0));
+    } catch {
+      throw new Error(`${file.name} could not be decoded by the browser or the compatibility engine.`);
+    }
+  }
 }
 
 function writeText(view: DataView, offset: number, value: string) {
@@ -126,7 +141,7 @@ async function joinAudioToDisk(files: File[], progress: ProgressHandler, options
     for (let index = 0; index < files.length; index += 1) {
       progress(Math.round((index / files.length) * 38), `Checking ${index + 1} of ${files.length}: ${files[index].name}`);
       try {
-        const decoded = await context.decodeAudioData(await files[index].arrayBuffer());
+        const decoded = await decodeAudioFile(context, files[index], (message) => progress(Math.round((index / files.length) * 38), message));
         valid.push({ file: files[index], frames: decoded.length, channels: decoded.numberOfChannels });
       } catch {
         warnings.push(`${files[index].name} could not be decoded by this browser.`);
@@ -143,7 +158,7 @@ async function joinAudioToDisk(files: File[], progress: ProgressHandler, options
     await writable.write(wavHeader(dataLength, channels, context.sampleRate, totalFrames));
     for (let index = 0; index < valid.length; index += 1) {
       progress(40 + Math.round((index / valid.length) * 58), `Writing ${index + 1} of ${valid.length}: ${valid[index].file.name}`);
-      const decoded = await context.decodeAudioData(await valid[index].file.arrayBuffer());
+      const decoded = await decodeAudioFile(context, valid[index].file, (message) => progress(40 + Math.round((index / valid.length) * 58), message));
       await writePcm(decoded, channels, writable);
     }
     await writable.close();
@@ -171,7 +186,7 @@ export async function joinAudioFiles(files: File[], progress: ProgressHandler, o
     const warnings: string[] = [];
     for (let index = 0; index < files.length; index += 1) {
       progress(Math.round((index / files.length) * 58), `Decoding ${files[index].name}`);
-      try { decoded.push(await context.decodeAudioData(await files[index].arrayBuffer())); }
+      try { decoded.push(await decodeAudioFile(context, files[index], (message) => progress(Math.round((index / files.length) * 58), message))); }
       catch {
         warnings.push(`${files[index].name} could not be decoded by this browser.`);
         if (!options.skipUnreadable) throw new Error(`${files[index].name} could not be decoded. Remove or replace it, or enable “Skip unreadable files”.`);
@@ -213,6 +228,54 @@ export async function convertAudioFileToWav(file: File, progress: ProgressHandle
     const blob = audioBufferToWav(decoded);
     progress(100, "Conversion complete");
     return { blob, filename: `${safeStem(file.name)}.wav` };
+  } finally {
+    await context.close();
+  }
+}
+
+export async function trimAudioFile(file: File, startSeconds: number, endSeconds: number, progress: ProgressHandler) {
+  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) throw new Error("This browser does not support local audio processing.");
+  const context = new AudioContextClass({ sampleRate: 44_100 });
+  try {
+    progress(15, `Reading ${file.name}`);
+    const source = await decodeAudioFile(context, file, (message) => progress(22, message));
+    const safeStart = Math.max(0, Math.min(source.duration, Number(startSeconds) || 0));
+    const safeEnd = Math.max(0, Math.min(source.duration, Number(endSeconds) || source.duration));
+    if (safeEnd <= safeStart) throw new Error(`End time must be after start time and within ${source.duration.toFixed(2)} seconds.`);
+    const startFrame = Math.floor(safeStart * source.sampleRate);
+    const endFrame = Math.min(source.length, Math.ceil(safeEnd * source.sampleRate));
+    const output = context.createBuffer(source.numberOfChannels, endFrame - startFrame, source.sampleRate);
+    for (let channel = 0; channel < source.numberOfChannels; channel += 1) {
+      output.getChannelData(channel).set(source.getChannelData(channel).subarray(startFrame, endFrame));
+    }
+    progress(82, "Encoding trimmed WAV");
+    const blob = audioBufferToWav(output);
+    progress(100, "Audio trim complete");
+    return { blob, filename: `${safeStem(file.name)}-${safeStart.toFixed(2)}s-${safeEnd.toFixed(2)}s.wav`, duration: source.duration };
+  } finally {
+    await context.close();
+  }
+}
+
+export async function changeAudioVolume(file: File, percent: number, progress: ProgressHandler) {
+  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) throw new Error("This browser does not support local audio processing.");
+  const context = new AudioContextClass({ sampleRate: 44_100 });
+  try {
+    progress(15, `Reading ${file.name}`);
+    const source = await decodeAudioFile(context, file, (message) => progress(22, message));
+    const gain = Math.max(0, Math.min(4, percent / 100));
+    const output = context.createBuffer(source.numberOfChannels, source.length, source.sampleRate);
+    for (let channel = 0; channel < source.numberOfChannels; channel += 1) {
+      const input = source.getChannelData(channel);
+      const target = output.getChannelData(channel);
+      for (let frame = 0; frame < input.length; frame += 1) target[frame] = Math.max(-1, Math.min(1, input[frame] * gain));
+    }
+    progress(82, "Encoding adjusted WAV");
+    const blob = audioBufferToWav(output);
+    progress(100, "Volume change complete");
+    return { blob, filename: `${safeStem(file.name)}-${Math.round(gain * 100)}pct.wav` };
   } finally {
     await context.close();
   }
@@ -318,19 +381,23 @@ export async function joinVideoFiles(files: File[], progress: ProgressHandler) {
 }
 
 export function parsePageSelection(value: string, totalPages: number) {
-  const indexes = new Set<number>();
+  const indexes: number[] = [];
+  const add = (page: number) => { if (page >= 1 && page <= totalPages) indexes.push(page - 1); };
   value.split(",").map((part) => part.trim()).filter(Boolean).forEach((part) => {
     const range = part.match(/^(\d+)\s*-\s*(\d+)$/);
     if (range) {
-      const start = Math.max(1, Number(range[1]));
-      const end = Math.min(totalPages, Number(range[2]));
-      for (let page = Math.min(start, end); page <= Math.max(start, end); page += 1) indexes.add(page - 1);
+      const rawStart = Number(range[1]);
+      const rawEnd = Number(range[2]);
+      if ((rawStart < 1 && rawEnd < 1) || (rawStart > totalPages && rawEnd > totalPages)) return;
+      const start = Math.max(1, Math.min(totalPages, rawStart));
+      const end = Math.max(1, Math.min(totalPages, rawEnd));
+      const direction = start <= end ? 1 : -1;
+      for (let page = start; direction > 0 ? page <= end : page >= end; page += direction) add(page);
     } else if (/^\d+$/.test(part)) {
-      const page = Number(part);
-      if (page >= 1 && page <= totalPages) indexes.add(page - 1);
+      add(Number(part));
     }
   });
-  return [...indexes];
+  return indexes;
 }
 
 export async function mergePdfFiles(files: File[], progress: ProgressHandler) {
