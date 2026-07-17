@@ -67,6 +67,9 @@ test("publishes crawl and answer-engine discovery files", async () => {
   const llms = await readFile(new URL("../public/llms.txt", import.meta.url), "utf8");
   assert.match(llms, /Capability labels/);
   assert.match(llms, /Trenith does not sell personal data/i);
+  const bingVerification = await readFile(new URL("../public/BingSiteAuth.xml", import.meta.url), "utf8");
+  assert.match(bingVerification, /^<\?xml version="1\.0"\?>/);
+  assert.match(bingVerification, /3712E9608164D8251298C91008089228/);
 });
 
 test("publishes machine-readable tool and release discovery", async () => {

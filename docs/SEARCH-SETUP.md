@@ -31,14 +31,14 @@ Attaching both hostnames to one build is not recommended because a static build 
 6. In the `trenith.in` property, submit `https://tools.trenith.in/sitemap.xml`.
 7. Use URL Inspection on the homepage, `/tools`, `/tools/metadata-remover`, `/tools/audio-joiner` and `/guides`; request indexing after the live test passes.
 8. Follow the earned-discovery and answer-engine publishing checklist in [`OFFSITE-DISCOVERY.md`](./OFFSITE-DISCOVERY.md). Do not buy links, automate directory submissions or publish fake reviews.
-8. Check Pages, Sitemaps, HTTPS and Core Web Vitals weekly after launch.
-9. Optional: copy the HTML verification tokens into `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` in the matching Vercel project and redeploy. DNS verification remains the durable method.
+9. Check Pages, Sitemaps, HTTPS and Core Web Vitals weekly after launch.
+10. Optional: copy the HTML verification tokens into `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` in the matching Vercel project and redeploy. DNS verification remains the durable method.
 
 ## 4. Bing Webmaster Tools
 
 1. Sign in to Bing Webmaster Tools.
 2. Import both verified Search Console properties, or add each site manually.
-3. If manual, place Bing's XML/TXT verification token in DNS or copy the meta token into `NEXT_PUBLIC_BING_SITE_VERIFICATION` for the matching project.
+3. The supplied Bing verification file is published at `/BingSiteAuth.xml`. Add both custom-domain sites in Bing and choose XML file verification; Bing should find the same file on each deployment.
 4. Submit each domain's `/sitemap.xml`.
 5. Use URL Submission for the same priority URLs.
 6. Enable IndexNow and create a key in Bing Webmaster Tools.
