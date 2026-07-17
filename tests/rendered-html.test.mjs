@@ -2,9 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
-const developmentPreviewMeta =
-  /<meta(?=[^>]*\bname=["']codex-preview["'])(?=[^>]*\bcontent=["']development["'])[^>]*>/i;
-
 const workerUrl = new URL("../dist/server/index.js", import.meta.url);
 workerUrl.searchParams.set("test", `${process.pid}-${Date.now()}`);
 const { default: worker } = await import(workerUrl.href);
@@ -14,16 +11,16 @@ const environment = {
 };
 const context = { waitUntil() {}, passThroughOnException() {} };
 
-test("renders the Trenith product shell and preview metadata", async () => {
+test("renders the Trenith product shell without third-party builder branding", async () => {
   const response = await worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), environment, context);
   const html = await response.text();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
-  assert.match(html, developmentPreviewMeta);
   assert.match(html, /Trenith/);
   assert.match(html, /Audio Joiner/);
   assert.match(html, /Every file tool/);
   assert.match(html, /Processed on your device/);
+  assert.doesNotMatch(html, /codex-preview|built (?:by|with) ai/i);
   assert.doesNotMatch(html, /Choose Pro|Choose Studio|monthly credits/i);
 });
 
