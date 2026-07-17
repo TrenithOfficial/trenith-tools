@@ -32,9 +32,16 @@ for (const [path, expected] of [
   ["/tools/audio-joiner", /Choose a complete folder/i],
   ["/connections", /Connections Vault/i],
   ["/studio", /AI Studio/i],
-  ["/about", /Trenith Technologies Pvt Ltd/i],
-  ["/privacy", /Device-processed files/i],
-  ["/terms", /Use the tools responsibly/i],
+  ["/about", /Trenith Technologies Private Limited/i],
+  ["/tools/metadata-remover", /Inspect first. Remove second/i],
+  ["/guides", /Practical answers/i],
+  ["/guides/remove-metadata-from-any-file", /What metadata can reveal/i],
+  ["/privacy", /Trenith does not sell personal data/i],
+  ["/terms", /Free tools. Clear responsibilities/i],
+  ["/cookies", /Cookies only after a real choice/i],
+  ["/privacy-choices", /Your privacy choices/i],
+  ["/security", /Device-first by architecture/i],
+  ["/sub-processors", /A limited provider chain/i],
 ]) {
   test(`renders ${path}`, async () => {
     const response = await worker.fetch(new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }), environment, context);
@@ -47,12 +54,16 @@ for (const [path, expected] of [
 test("publishes crawl and answer-engine discovery files", async () => {
   const robots = await worker.fetch(new Request("http://localhost/robots.txt"), environment, context);
   assert.equal(robots.status, 200);
-  assert.match(await robots.text(), /Sitemap: https:\/\/trenith-tools\.vercel\.app\/sitemap\.xml/);
+  assert.match(await robots.text(), /Sitemap: https:\/\/tools\.trenith\.com\/sitemap\.xml/);
   const sitemap = await worker.fetch(new Request("http://localhost/sitemap.xml"), environment, context);
   assert.equal(sitemap.status, 200);
-  assert.match(await sitemap.text(), /\/tools\/audio-joiner/);
+  const sitemapText = await sitemap.text();
+  assert.match(sitemapText, /\/tools\/audio-joiner/);
+  assert.match(sitemapText, /\/tools\/metadata-remover/);
+  assert.match(sitemapText, /tools\.trenith\.in/);
   const llms = await readFile(new URL("../public/llms.txt", import.meta.url), "utf8");
   assert.match(llms, /Capability labels/);
+  assert.match(llms, /Trenith does not sell personal data/i);
 });
 
 test("blocks private-network URL scanning", async () => {

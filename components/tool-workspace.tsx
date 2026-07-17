@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ToolDefinition } from "../lib/catalog";
+import { MetadataScrubber } from "./metadata-scrubber";
 import {
   convertAudioFileToWav,
   downloadBlob,
@@ -50,6 +51,7 @@ function FileList({ files, setFiles }: { files: File[]; setFiles: (files: File[]
 }
 
 export function ToolWorkspace({ tool }: { tool: ToolDefinition }) {
+  if (tool.slug === "metadata-remover") return <MetadataScrubber />;
   if (tool.kind === "byok") return <ByokWorkspace tool={tool} />;
   if (tool.slug === "audio-downloader") return <DownloaderWorkspace />;
   if (["tap-bpm", "bpm-delay-calculator", "note-frequency", "metronome"].includes(tool.slug)) return <MusicUtility slug={tool.slug} />;
@@ -86,6 +88,8 @@ function FileWorkspace({ tool }: { tool: ToolDefinition }) {
   const [imageWidth, setImageWidth] = useState(1920);
   const [imageQuality, setImageQuality] = useState(82);
   const [imageFormat, setImageFormat] = useState<"image/jpeg" | "image/png" | "image/webp">("image/webp");
+  const [skipUnreadable, setSkipUnreadable] = useState(false);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const isAudioJoin = tool.slug === "audio-joiner";
   const isAudioConvert = tool.slug === "audio-converter";
@@ -98,7 +102,8 @@ function FileWorkspace({ tool }: { tool: ToolDefinition }) {
   const totalMb = (files.reduce((sum, file) => sum + file.size, 0) / 1024 / 1024).toFixed(2);
 
   const outputLabel = useMemo(() => {
-    if (isAudioJoin || isAudioConvert) return "Lossless WAV";
+    if (isAudioJoin) return "Streaming WAV / RF64";
+    if (isAudioConvert) return "Lossless WAV";
     if (isVideo) return "High-quality WebM";
     if (isImage) return imageFormat.replace("image/", "").toUpperCase().replace("JPEG", "JPG");
     if (tool.slug === "split-pdf") return "ZIP with individual PDFs";
@@ -107,10 +112,10 @@ function FileWorkspace({ tool }: { tool: ToolDefinition }) {
 
   const update = (value: number, label: string) => { setProgress(value); setProgressLabel(label); };
   async function run() {
-    setBusy(true); setError(""); setProgress(1);
+    setBusy(true); setError(""); setWarnings([]); setProgress(1);
     try {
       let blob: Blob; let filename = "trenith-output.pdf";
-      if (isAudioJoin) { const output = await joinAudioFiles(files, update); blob = output.blob; filename = output.filename; }
+      if (isAudioJoin) { const output = await joinAudioFiles(files, update, { skipUnreadable }); setWarnings(output.warnings); if (output.savedToDisk) return; if (!output.blob) throw new Error("The browser did not return an audio output."); blob = output.blob; filename = output.filename; }
       else if (isAudioConvert) { const output = await convertAudioFileToWav(files[0], update); blob = output.blob; filename = output.filename; }
       else if (isVideo) { const output = await joinVideoFiles(files, update); blob = output.blob; filename = output.filename; }
       else if (tool.slug === "merge-pdf") blob = await mergePdfFiles(files, update);
@@ -128,7 +133,7 @@ function FileWorkspace({ tool }: { tool: ToolDefinition }) {
     finally { setBusy(false); }
   }
 
-  return <div className="tool-workspace file-workspace"><section className="workspace-panel file-input-panel"><span className="panel-label">INPUT</span><h2>{multiple ? "Add files in output order" : "Choose a source file"}</h2><p>Source files remain in this browser tab for device-processed tools.</p><div className={multiple && (isAudioJoin || isVideo) ? "picker-grid" : ""}><FilePicker files={files} setFiles={setFiles} accept={accept} multiple={multiple} title={isImagesToPdf ? "Choose JPG or PNG images" : "Choose files"} />{(isAudioJoin || isVideo) && <FilePicker files={files} setFiles={setFiles} accept={accept} folder multiple title="Choose a complete folder" />}</div>{files.length > 0 && <FileList files={files} setFiles={setFiles} />}</section><aside className="workspace-panel output-panel"><span className="panel-label">OUTPUT</span><h2>{outputLabel}</h2><p>{files.length} file{files.length === 1 ? "" : "s"} · {totalMb} MB selected</p>{tool.slug === "organize-pdf" && <label>Page order or ranges<input value={selection} onChange={(event) => setSelection(event.target.value)} placeholder="1-3,5,8" /></label>}{tool.slug === "watermark-pdf" && <label>Watermark text<input value={watermark} onChange={(event) => setWatermark(event.target.value)} maxLength={48} /></label>}{isImage && <><label>Maximum width<input type="number" min="64" max="10000" value={imageWidth} onChange={(event) => setImageWidth(Number(event.target.value))} /></label><label>Output format<select value={imageFormat} onChange={(event) => setImageFormat(event.target.value as typeof imageFormat)}><option value="image/webp">WebP</option><option value="image/jpeg">JPG</option><option value="image/png">PNG</option></select></label><label>Quality · {imageQuality}%<input type="range" min="25" max="100" value={imageQuality} onChange={(event) => setImageQuality(Number(event.target.value))} disabled={imageFormat === "image/png"} /></label></>}{progress > 0 && <Progress value={progress} label={progressLabel} />}{error && <div className="workspace-error">{error}</div>}<button className="workspace-run" onClick={run} disabled={busy || files.length < minimum}>{busy ? "Processing…" : "Process and download"}<span>→</span></button><small>There is no artificial file-count limit. Browser memory, codec support and device capacity still apply.</small></aside></div>;
+  return <div className="tool-workspace file-workspace"><section className="workspace-panel file-input-panel"><span className="panel-label">INPUT</span><h2>{multiple ? "Add files in output order" : "Choose a source file"}</h2><p>Source files remain in this browser tab for device-processed tools.</p><div className={multiple && (isAudioJoin || isVideo) ? "picker-grid" : ""}><FilePicker files={files} setFiles={setFiles} accept={accept} multiple={multiple} title={isImagesToPdf ? "Choose JPG or PNG images" : "Choose files"} />{(isAudioJoin || isVideo) && <FilePicker files={files} setFiles={setFiles} accept={accept} folder multiple title="Choose a complete folder" />}</div>{files.length > 0 && <FileList files={files} setFiles={setFiles} />}</section><aside className="workspace-panel output-panel"><span className="panel-label">OUTPUT</span><h2>{outputLabel}</h2><p>{files.length} file{files.length === 1 ? "" : "s"} · {totalMb} MB selected</p>{tool.slug === "organize-pdf" && <label>Page order or ranges<input value={selection} onChange={(event) => setSelection(event.target.value)} placeholder="1-3,5,8" /></label>}{tool.slug === "watermark-pdf" && <label>Watermark text<input value={watermark} onChange={(event) => setWatermark(event.target.value)} maxLength={48} /></label>}{isAudioJoin && <label className="check-label"><input type="checkbox" checked={skipUnreadable} onChange={(event) => setSkipUnreadable(event.target.checked)} /><span>Skip unreadable files after validation</span></label>}{isAudioJoin && <div className="large-job-note"><strong>Large-folder mode</strong><p>Jobs over 60 files or 120 MB stream directly to disk in Chrome/Edge, preventing the multi-gigabyte memory failure shown in the previous version.</p></div>}{isImage && <><label>Maximum width<input type="number" min="64" max="10000" value={imageWidth} onChange={(event) => setImageWidth(Number(event.target.value))} /></label><label>Output format<select value={imageFormat} onChange={(event) => setImageFormat(event.target.value as typeof imageFormat)}><option value="image/webp">WebP</option><option value="image/jpeg">JPG</option><option value="image/png">PNG</option></select></label><label>Quality · {imageQuality}%<input type="range" min="25" max="100" value={imageQuality} onChange={(event) => setImageQuality(Number(event.target.value))} disabled={imageFormat === "image/png"} /></label></>}{progress > 0 && <Progress value={progress} label={progressLabel} />}{error && <div className="workspace-error">{error}</div>}{warnings.length > 0 && <div className="workspace-warning"><strong>{warnings.length} file{warnings.length === 1 ? "" : "s"} skipped</strong><span>{warnings.slice(0, 3).join(" ")}</span></div>}<button className="workspace-run" onClick={run} disabled={busy || files.length < minimum}>{busy ? "Processing…" : isAudioJoin && (files.length > 60 || Number(totalMb) > 120) ? "Choose destination and stream" : "Process and download"}<span>→</span></button><small>There is no artificial file-count limit. Large jobs require compatible desktop storage APIs; codecs, free disk space and individual file health still apply.</small></aside></div>;
 }
 
 function ByokWorkspace({ tool }: { tool: ToolDefinition }) {

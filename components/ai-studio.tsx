@@ -19,9 +19,25 @@ const workflowPrompts: Record<string, string> = {
   "translate-pdf": "Translate the following document content while preserving headings, lists, terminology and tone. State the target language first:",
   "ocr-pdf": "Clean and structure the following OCR text. Preserve reading order, headings, tables and uncertain characters:",
   "office-converter": "Analyze the requested document conversion and return a faithful content and formatting plan:",
+  "ai-chat": "Answer the following request accurately. Separate verified facts, assumptions and recommended next steps:",
+  "ai-writer": "Create an original draft from the facts below. Ask for missing evidence instead of inventing it. Audience, goal and tone:",
+  "grammar-checker": "Correct grammar, spelling, punctuation and clarity while preserving meaning. Return the corrected text followed by a concise change summary. Regional English style:",
+  "paraphraser": "Rewrite the following authorized text for clarity and tone. Preserve all factual meaning, do not hide plagiarism and do not imitate a living author:",
+  "code-assistant": "Act as a careful code reviewer. State assumptions, identify security and correctness risks, then provide tested code or a patch. Runtime and request:",
+  "regex-generator": "Create a regular expression for the following requirement. Include the target runtime, an explained pattern, matching examples, non-matching examples and catastrophic-backtracking risks:",
+  "data-analyzer": "Create a defensible data-analysis plan from the following schema or sample. Include validation, missing-data handling, formulas or queries, uncertainty and decision limits:",
+  "seo-brief-generator": "Create a people-first SEO, AEO and answer-engine brief from the verified facts below. Include intent, H1/H2 structure, direct answers, entities, internal links, evidence gaps and claims to avoid. Do not keyword-stuff:",
 };
 
 type StudioResult = { kind: "text"; text: string } | { kind: "file"; url: string; name: string; mime: string };
+
+const fileWorkflows = new Set(["cover-remix", "stem-separator", "voice-conversion", "audio-to-midi", "audio-cleanup", "ocr-pdf", "office-converter"]);
+const compatibleOnlyWorkflows = new Set(["ai-song-generator", "ai-vocal-generator", ...fileWorkflows]);
+const workflowAccept: Record<string, string> = {
+  "cover-remix": "audio/*", "stem-separator": "audio/*", "voice-conversion": "audio/*",
+  "audio-to-midi": "audio/*", "audio-cleanup": "audio/*", "ocr-pdf": "image/*,application/pdf",
+  "office-converter": ".doc,.docx,.xls,.xlsx,.ppt,.pptx,.pdf,.odt,.ods,.odp",
+};
 
 function fileNameFromResponse(response: Response, mime: string) {
   const match = response.headers.get("content-disposition")?.match(/filename="?([^";]+)"?/i);
@@ -39,6 +55,7 @@ export function AiStudio() {
   const [connections, setConnections] = useState<ByokConnection[]>([]);
   const [connectionId, setConnectionId] = useState("");
   const [prompt, setPrompt] = useState(workflowPrompts[workflow] || "Describe the result you want to create.");
+  const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [result, setResult] = useState<StudioResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -55,7 +72,7 @@ export function AiStudio() {
   }, []);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setPrompt(workflowPrompts[workflow] || "Describe the result you want to create."));
+    const frame = requestAnimationFrame(() => { setPrompt(workflowPrompts[workflow] || "Describe the result you want to create."); setSourceFile(null); });
     return () => cancelAnimationFrame(frame);
   }, [workflow]);
 
@@ -64,6 +81,9 @@ export function AiStudio() {
   async function run() {
     if (!connection) { setError("Connect and select a provider before running this workflow."); return; }
     if (!prompt.trim()) { setError("Enter instructions or text for the provider."); return; }
+    if (fileWorkflows.has(workflow) && !sourceFile) { setError("Choose the authorized source file required by this workflow."); return; }
+    if (compatibleOnlyWorkflows.has(workflow) && connection.provider !== "compatible") { setError("This media workflow requires a compatible provider endpoint that supports the selected job and returns its result. The built-in OpenAI, Anthropic, Gemini and OpenRouter connectors are text-only."); return; }
+    if (workflow === "text-to-speech" && !["elevenlabs", "compatible"].includes(connection.provider)) { setError("Text to Speech requires ElevenLabs or a compatible endpoint that returns audio."); return; }
     setBusy(true); setError("");
     if (result?.kind === "file") URL.revokeObjectURL(result.url);
     setResult(null);
@@ -71,10 +91,11 @@ export function AiStudio() {
       let response: Response;
       if (connection.provider === "compatible") {
         if (!connection.endpoint) throw new Error("This connection is missing its HTTPS endpoint.");
+        const body = sourceFile ? (() => { const form = new FormData(); form.set("file", sourceFile); form.set("prompt", prompt); form.set("model", connection.model); form.set("workflow", workflow); return form; })() : JSON.stringify({ model: connection.model, messages: [{ role: "user", content: prompt }], prompt, workflow });
         response = await fetch(connection.endpoint, {
           method: "POST",
-          headers: { "content-type": "application/json", Authorization: `Bearer ${connection.apiKey}` },
-          body: JSON.stringify({ model: connection.model, messages: [{ role: "user", content: prompt }], prompt, workflow }),
+          headers: { ...(sourceFile ? {} : { "content-type": "application/json" }), Authorization: `Bearer ${connection.apiKey}` },
+          body,
         });
       } else {
         response = await fetch("/api/byok", {
@@ -105,6 +126,8 @@ export function AiStudio() {
       <div className="studio-heading"><span className="panel-label">ACTIVE WORKFLOW</span><h2>{workflowTool?.name || "AI provider runner"}</h2><p>{workflowTool?.description || "Send a real request using one of your session connections."}</p></div>
       <label className="studio-field">Provider connection<select value={connectionId} onChange={(event) => setConnectionId(event.target.value)}><option value="">Select a session connection</option>{connections.map((item) => <option key={item.id} value={item.id}>{item.label} · {providerDefinitions[item.provider].name}</option>)}</select></label>
       {!connections.length && <div className="studio-empty"><span>⌁</span><div><strong>No provider is connected</strong><p>Add a session connection, test it, then return here to run a request.</p></div><Link href="/connections">Open Connections →</Link></div>}
+      {compatibleOnlyWorkflows.has(workflow) && <div className="connection-notice"><span>↗</span><p>This media workflow needs a compatible endpoint that implements <strong>{workflow}</strong>. Trenith sends a JSON brief, or multipart form data when a file is required, and displays the endpoint response.</p></div>}
+      {fileWorkflows.has(workflow) && <label className="studio-field">Authorized source file<input type="file" accept={workflowAccept[workflow]} onChange={(event) => setSourceFile(event.target.files?.[0] || null)} />{sourceFile && <small>{sourceFile.name} · {(sourceFile.size / 1024 / 1024).toFixed(2)} MB</small>}</label>}
       <label className="studio-field">Instructions or source text<textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={13} maxLength={40000} /></label>
       <div className="studio-run-row"><small>{prompt.length.toLocaleString()} / 40,000 characters</small><button className="workspace-run" onClick={run} disabled={busy || !connectionId}>{busy ? "Provider is working…" : "Run with my provider"}<span>→</span></button></div>
       {error && <div className="workspace-error" aria-live="polite">{error}</div>}

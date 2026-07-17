@@ -3,7 +3,7 @@ import { JsonLd } from "../components/json-ld";
 import { OrbitVisual } from "../components/orbit-visual";
 import { ToolCard } from "../components/tool-card";
 import { quickTools, tools } from "../lib/catalog";
-import { COMPANY_NAME, siteUrl } from "../lib/site";
+import { COMPANY_ADDRESS, COMPANY_CIN, COMPANY_NAME, siteLanguage, siteUrl, trenithContactUrl } from "../lib/site";
 
 const faqs = [
   ["What does processed on your device mean?", "Audio, video, PDF and image source files are handled by browser APIs on your computer or phone. Trenith does not receive or store those input files for these tools."],
@@ -20,10 +20,12 @@ export default function Home() {
       "@type": "Organization",
       "@id": `${siteUrl("/")}#organization`,
       name: COMPANY_NAME,
-      url: "https://trenith.com",
+      legalName: COMPANY_NAME,
+      taxID: COMPANY_CIN,
+      url: "https://www.trenith.com",
       logo: siteUrl("/trenith-mark.png"),
-      areaServed: ["India", "Worldwide"],
-      founder: { "@type": "Person", name: "Sai Phanindra Manikanta Yalamanchili" },
+      address: { "@type": "PostalAddress", streetAddress: "Plot No. 272, Pragatinagar", addressLocality: "Hyderabad", addressRegion: "Telangana", postalCode: "500090", addressCountry: "IN" },
+      areaServed: ["India", "United States", "European Union", "Worldwide"],
     },
     {
       "@context": "https://schema.org",
@@ -32,7 +34,7 @@ export default function Home() {
       name: "Trenith Tools",
       url: siteUrl("/"),
       publisher: { "@id": `${siteUrl("/")}#organization` },
-      inLanguage: "en-IN",
+      inLanguage: siteLanguage,
     },
     {
       "@context": "https://schema.org",
@@ -60,7 +62,7 @@ export default function Home() {
         <div className="hero-copy">
           <span className="section-kicker">PRIVATE-BY-DESIGN FILE UTILITIES</span>
           <h1>Every file tool.<br /><em>Free. Private. Fast.</em></h1>
-          <p>Download authorized audio, join media, optimize documents and connect your own AI providers—inside one precise Trenith workspace.</p>
+          <p>Remove private metadata, download authorized audio, join large media folders, work with PDFs and connect your own AI providers—inside one clear Trenith workspace.</p>
           <div className="hero-actions">
             <Link className="primary-action" href="/tools">Open all {tools.length} tools <span>→</span></Link>
             <Link className="text-action" href="/connections">Connect your AI keys</Link>
@@ -95,7 +97,7 @@ export default function Home() {
       <section className="category-showcase page-frame">
         <div className="section-title-row"><div><span className="section-number">02</span><h2>One system, every workflow</h2></div><p>Each category has dedicated tool pages, support notes, formats and a real action surface.</p></div>
         <div className="category-orbit">
-          {["Audio", "Video", "PDF", "Image", "Music", "AI Studio"].map((category, index) => (
+          {["Privacy", "Audio", "Video", "PDF", "Image", "Music", "AI Studio"].map((category, index) => (
             <Link key={category} href={`/tools?category=${encodeURIComponent(category)}`}><span>0{index + 1}</span><h3>{category}</h3><p>{tools.filter((tool) => tool.category === category).length} tools</p><b>↗</b></Link>
           ))}
         </div>
@@ -106,6 +108,8 @@ export default function Home() {
         <div><span className="section-kicker">BRING YOUR OWN KEY</span><h2>AI access without another subscription.</h2><p>Save connections for this session, test a supported provider, or unlock an encrypted device vault. Provider charges—if any—stay directly between you and that provider.</p></div>
         <Link className="primary-action" href="/connections">Open Connections Vault <span>→</span></Link>
       </section>
+
+      <section className="service-cta page-frame"><div><span className="section-kicker">FROM FREE TOOL TO BUSINESS SYSTEM</span><h2>When a browser workflow becomes critical, Trenith can build the infrastructure.</h2><p>We design SaaS backends, AI integrations, cloud platforms, CRM workflows and automation for organizations in India and worldwide. {COMPANY_ADDRESS}. CIN {COMPANY_CIN}.</p></div><a className="primary-action" href={trenithContactUrl} target="_blank" rel="noreferrer">Talk to Trenith <span>↗</span></a></section>
 
       <section className="faq-section page-frame">
         <div><span className="section-kicker">DIRECT ANSWERS</span><h2>Frequently asked questions</h2><p>Plain-language answers for people, search engines and answer engines.</p></div>

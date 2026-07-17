@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { AiStudio } from "../../components/ai-studio";
+import { alternateUrls } from "../../lib/site";
 
 export const metadata: Metadata = {
   title: "Free BYOK AI Studio",
   description: "Run AI workflows using your own OpenAI, Anthropic, Gemini, ElevenLabs, OpenRouter or compatible provider API key.",
-  alternates: { canonical: "/studio" },
+  alternates: alternateUrls("/studio"),
 };
 
 export default function StudioPage() {

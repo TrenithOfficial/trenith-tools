@@ -1,5 +1,5 @@
 export type ToolKind = "device" | "byok" | "web";
-export type ToolCategory = "Audio" | "Video" | "PDF" | "Image" | "AI Studio" | "Music";
+export type ToolCategory = "Audio" | "Video" | "PDF" | "Image" | "Privacy" | "AI Studio" | "Music";
 
 export type ToolDefinition = {
   slug: string;
@@ -15,6 +15,11 @@ export type ToolDefinition = {
 };
 
 export const tools: ToolDefinition[] = [
+  {
+    slug: "metadata-remover", name: "Metadata Remover", shortName: "Metadata Remover", category: "Privacy", kind: "device", icon: "⌫", accent: "cyan",
+    description: "Inspect, remove and verify private metadata across images, audio, video, documents, archives and other ExifTool-compatible files on your device.", formats: ["JPG", "PNG", "HEIC", "RAW", "TIFF", "MP4", "MOV", "MKV", "MP3", "FLAC", "OGG", "WAV", "PDF", "DOCX", "XLSX", "PPTX", "EPUB", "SVG", "and more"],
+    steps: ["Choose any files or an entire folder", "Inspect detected EXIF, GPS, author and application metadata", "Remove, re-scan and download verified cleaned copies"],
+  },
   {
     slug: "audio-downloader", name: "Audio Downloader", shortName: "Audio Downloader", category: "Audio", kind: "web", icon: "↓", accent: "cyan",
     description: "Discover direct public audio files exposed by a webpage or media URL without bypassing access controls.", formats: ["MP3", "WAV", "M4A", "AAC", "OGG", "FLAC", "OPUS"],
@@ -170,12 +175,52 @@ export const tools: ToolDefinition[] = [
     description: "Connect a document conversion API for Word, PowerPoint, Excel and PDF workflows.",
     steps: ["Connect a conversion endpoint", "Choose a document and output format", "Run and retrieve the converted file"],
   },
+  {
+    slug: "ai-chat", name: "BYOK AI Chat", shortName: "AI Chat", category: "AI Studio", kind: "byok", icon: "◌", accent: "cyan",
+    description: "Ask questions and generate answers with your own OpenAI, Anthropic, Gemini, OpenRouter or compatible model connection.",
+    steps: ["Connect a provider you already use", "Enter a question with useful context", "Review, copy or download the provider response"],
+  },
+  {
+    slug: "ai-writer", name: "AI Writing Assistant", shortName: "AI Writer", category: "AI Studio", kind: "byok", icon: "✎", accent: "violet",
+    description: "Draft useful original content with a connected language model and clear audience, tone and factual constraints.",
+    steps: ["Connect a language model", "Describe the audience, goal and source facts", "Generate and edit the draft"],
+  },
+  {
+    slug: "grammar-checker", name: "AI Grammar Checker", shortName: "Grammar Checker", category: "AI Studio", kind: "byok", icon: "✓", accent: "lime",
+    description: "Correct grammar, spelling and clarity while preserving the writer’s meaning and preferred regional English.",
+    steps: ["Connect a language model", "Paste the text and choose a regional style", "Review the corrected text and explanations"],
+  },
+  {
+    slug: "paraphraser", name: "Responsible AI Paraphraser", shortName: "Paraphraser", category: "AI Studio", kind: "byok", icon: "⇄", accent: "amber",
+    description: "Rewrite text for clarity or tone without fabricating facts, concealing plagiarism or imitating a living author.",
+    steps: ["Connect a language model", "Paste authorized source text and choose a tone", "Review the transparent rewrite"],
+  },
+  {
+    slug: "code-assistant", name: "AI Code Assistant", shortName: "Code Assistant", category: "AI Studio", kind: "byok", icon: "</>", accent: "blue",
+    description: "Explain, review or draft code with your connected model while keeping secrets and credentials out of prompts.",
+    steps: ["Connect a capable model", "Describe the language, runtime and expected behavior", "Review and test the generated code"],
+  },
+  {
+    slug: "regex-generator", name: "AI Regular Expression Builder", shortName: "Regex Builder", category: "AI Studio", kind: "byok", icon: ".*", accent: "rose",
+    description: "Generate a regular expression with test cases, edge cases and an explanation for your selected programming language.",
+    steps: ["Connect a language model", "Describe matches, exclusions and runtime", "Test the expression against supplied examples"],
+  },
+  {
+    slug: "data-analyzer", name: "AI Data Analysis Planner", shortName: "Data Analyzer", category: "AI Studio", kind: "byok", icon: "Σ", accent: "cyan",
+    description: "Turn a dataset description or pasted sample into a defensible analysis plan, formulas, queries and validation checks.",
+    steps: ["Connect a language model", "Describe columns, units and the decision to support", "Generate an analysis and verification plan"],
+  },
+  {
+    slug: "seo-brief-generator", name: "SEO & Answer Brief Generator", shortName: "SEO Brief", category: "AI Studio", kind: "byok", icon: "↗", accent: "violet",
+    description: "Create a people-first search and answer-engine content brief from verified business facts without keyword stuffing.",
+    steps: ["Connect a language model", "Add audience, region, evidence and search intent", "Generate a structured, fact-checked brief"],
+  },
 ];
 
 export const toolBySlug = Object.fromEntries(tools.map((tool) => [tool.slug, tool])) as Record<string, ToolDefinition>;
-export const quickToolSlugs = ["audio-downloader", "audio-joiner", "video-joiner", "merge-pdf", "compress-pdf", "image-converter"];
+export const quickToolSlugs = ["metadata-remover", "audio-downloader", "audio-joiner", "video-joiner", "merge-pdf", "image-converter"];
 export const quickTools = quickToolSlugs.map((slug) => toolBySlug[slug]);
-export const categories: Array<"All" | ToolCategory> = ["All", "Audio", "Video", "PDF", "Image", "Music", "AI Studio"];
+export const categories: Array<"All" | ToolCategory> = ["All", "Privacy", "Audio", "Video", "PDF", "Image", "Music", "AI Studio"];
 
 export function kindLabel(kind: ToolKind) {
   if (kind === "device") return "Processed on your device";

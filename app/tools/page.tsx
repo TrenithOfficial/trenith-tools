@@ -3,12 +3,12 @@ import { Suspense } from "react";
 import { JsonLd } from "../../components/json-ld";
 import { ToolsBrowser } from "../../components/tools-browser";
 import { tools } from "../../lib/catalog";
-import { siteUrl } from "../../lib/site";
+import { alternateUrls, siteUrl } from "../../lib/site";
 
 export const metadata: Metadata = {
   title: "All Free File & BYOK AI Tools",
-  description: "Browse free Trenith audio, video, PDF, image, music and BYOK AI tools. Every listing opens a real tool workspace.",
-  alternates: { canonical: "/tools" },
+  description: "Browse free Trenith metadata, audio, video, PDF, image, music and BYOK AI tools. Every listing opens a working tool workspace.",
+  alternates: alternateUrls("/tools"),
 };
 
 export default function ToolsPage() {

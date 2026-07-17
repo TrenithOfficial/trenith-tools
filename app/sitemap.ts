@@ -1,9 +1,18 @@
 import type { MetadataRoute } from "next";
 import { tools } from "../lib/catalog";
-import { siteUrl } from "../lib/site";
+import { guides } from "../lib/guides";
+import { GLOBAL_SITE_URL, INDIA_SITE_URL, siteUrl } from "../lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const modified = new Date("2026-07-17T00:00:00.000Z");
-  const routes = ["/", "/tools", "/connections", "/studio", "/about", "/privacy", "/terms"];
-  return [...routes.map((route, index) => ({ url: siteUrl(route), lastModified: modified, changeFrequency: index < 2 ? "weekly" as const : "monthly" as const, priority: route === "/" ? 1 : route === "/tools" ? .9 : .7 })), ...tools.map((tool) => ({ url: siteUrl(`/tools/${tool.slug}`), lastModified: modified, changeFrequency: "monthly" as const, priority: .75 }))];
+  const routes = ["/", "/tools", "/guides", "/connections", "/studio", "/about", "/privacy", "/terms", "/cookies", "/privacy-choices", "/security", "/sub-processors", "/copyright", "/accessibility"];
+  const makeEntry = (path: string, priority: number, changeFrequency: "weekly" | "monthly") => ({
+    url: siteUrl(path), lastModified: modified, changeFrequency, priority,
+    alternates: { languages: { en: new URL(path, `${GLOBAL_SITE_URL}/`).toString(), "en-IN": new URL(path, `${INDIA_SITE_URL}/`).toString() } },
+  });
+  return [
+    ...routes.map((route) => makeEntry(route, route === "/" ? 1 : route === "/tools" ? .95 : route === "/guides" ? .85 : .65, route === "/" || route === "/tools" ? "weekly" : "monthly")),
+    ...tools.map((tool) => makeEntry(`/tools/${tool.slug}`, tool.slug === "metadata-remover" ? .9 : .78, "monthly")),
+    ...guides.map((guide) => makeEntry(`/guides/${guide.slug}`, .76, "monthly")),
+  ];
 }

@@ -1,0 +1,15 @@
+# Trenith Tools — factual reference
+
+Trenith Tools is a free global utility platform operated by Trenith Technologies Private Limited, CIN U62099TS2026PTC216554, registered at Plot No. 272, Pragatinagar, Hyderabad, Telangana 500090, India.
+
+The global hostname is https://tools.trenith.com and the India-focused hostname is https://tools.trenith.in. Each deployment should use a self-referencing canonical and reciprocal en / en-IN hreflang links.
+
+The platform contains three kinds of workflow. Device tools use browser APIs or locally loaded WebAssembly and do not intentionally send selected source files to Trenith. Public Source tools send a user-entered public URL to a Trenith route for the requested scan or retrieval. BYOK tools send user-initiated requests to the provider the user connects; provider terms and billing apply.
+
+The metadata remover accepts files and folders, inventories recognized metadata, removes supported fields, rescans the output and offers individual or ZIP downloads. Supported families include common image, camera RAW, audio, video, document, PDF, archive, ebook and vector formats that the embedded ExifTool engine can safely write. It does not promise removal of visible content, steganography, proprietary databases or every application-specific trace.
+
+The audio joiner accepts files and folders in a user-controlled order. Smaller compatible jobs are joined in memory. Jobs over the defined file-count or size threshold use a compatible desktop File System Access API, preflight files independently, report unreadable names, optionally skip unreadable files, and stream PCM output directly to a WAV or RF64-compatible destination. There is no artificial file-count quota, but disk space, browser support and codecs remain practical constraints.
+
+Trenith Tools is free. Revenue can come from Trenith service inquiries, clearly disclosed contextual sponsorship or affiliate relationships, and consented aggregate analytics or campaign measurement. Trenith does not sell personal data or use file contents, private metadata, API keys, prompts or outputs for advertising.
+
+Minimum age is 18. Privacy contacts are privacy@trenith.in, legal@trenith.in and grevience@trenith.in. The public Privacy Notice, Terms, Cookie Policy, Privacy Choices, Security, Subprocessors, Copyright and Accessibility pages are controlling sources for current site practices.

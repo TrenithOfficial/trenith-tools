@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { JsonLd } from "../../../components/json-ld";
 import { ToolWorkspace } from "../../../components/tool-workspace";
 import { kindLabel, toolBySlug, tools } from "../../../lib/catalog";
-import { COMPANY_NAME, siteUrl } from "../../../lib/site";
+import { alternateUrls, COMPANY_NAME, siteUrl, trenithContactUrl } from "../../../lib/site";
 
 type Props = { params: Promise<{ slug: string }> };
 
@@ -20,8 +20,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     title: `${tool.name} — Free Online Tool`,
     description: `${tool.description} Open the free ${tool.name} workspace from Trenith Technologies.`,
     keywords: [tool.name, `free ${tool.name.toLowerCase()}`, `${tool.category.toLowerCase()} tools`, ...(tool.formats || [])],
-    alternates: { canonical: `/tools/${tool.slug}` },
-    openGraph: { title: `${tool.name} | Trenith Tools`, description: tool.description, url: `/tools/${tool.slug}`, type: "website" },
+    alternates: alternateUrls(`/tools/${tool.slug}`),
+    openGraph: { title: `${tool.name} | Trenith Tools`, description: tool.description, url: siteUrl(`/tools/${tool.slug}`), type: "website" },
   };
 }
 
@@ -68,6 +68,7 @@ export default async function ToolPage({ params }: Props) {
     <section className="workspace-section page-frame"><ToolWorkspace tool={tool} /></section>
     <section className="how-section page-frame"><div><span className="section-kicker">HOW IT WORKS</span><h2>Three clear steps</h2><p>No hidden queue, upgrade screen or misleading result state.</p></div><ol>{tool.steps.map((step, index) => <li key={step}><span>0{index + 1}</span><p>{step}</p></li>)}</ol></section>
     <section className="tool-assurance page-frame"><article><span>◇</span><h2>{tool.kind === "device" ? "Your files remain on your device" : tool.kind === "byok" ? "Your provider account stays yours" : "Only public sources are scanned"}</h2><p>{tool.kind === "device" ? "Processing happens inside the browser tab. Refreshing or closing the tab clears the current file queue." : tool.kind === "byok" ? "Trenith sends requests only when you run them and does not include bundled provider credits." : "The scanner rejects private network addresses and unsupported media URLs."}</p></article><article><span>∞</span><h2>No Trenith usage price</h2><p>Device tools and the Trenith interface are free. External providers may separately charge the account associated with your own API key.</p></article></section>
+    <section className="service-cta page-frame"><div><span className="section-kicker">NEED THIS AT BUSINESS SCALE?</span><h2>Turn a useful tool into your workflow.</h2><p>Trenith builds SaaS backends, AI integrations, cloud infrastructure, CRM workflows and automation for teams that need more than a one-off browser task.</p></div><a className="primary-action" href={trenithContactUrl} target="_blank" rel="noreferrer">Build with Trenith <span>↗</span></a></section>
     {related.length > 0 && <section className="related-section page-frame"><div className="section-title-row"><div><span className="section-number">NEXT</span><h2>Related {tool.category} tools</h2></div><Link href={`/tools?category=${encodeURIComponent(tool.category)}`}>View category →</Link></div><div className="related-grid">{related.map((item) => <Link href={`/tools/${item.slug}`} key={item.slug}><span className={`tool-line-icon ${item.accent}`}>{item.icon}</span><div><h3>{item.shortName}</h3><p>{kindLabel(item.kind)}</p></div><b>↗</b></Link>)}</div></section>}
   </>;
 }

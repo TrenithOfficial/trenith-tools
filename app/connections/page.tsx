@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
 import { ConnectionVault } from "../../components/connection-vault";
+import { alternateUrls } from "../../lib/site";
 
 export const metadata: Metadata = {
   title: "BYOK Connections Vault",
   description: "Connect your own OpenAI, Anthropic, Gemini, ElevenLabs, OpenRouter or compatible API key to Trenith Tools.",
-  alternates: { canonical: "/connections" },
+  alternates: alternateUrls("/connections"),
   robots: { index: true, follow: true },
 };
 

@@ -1,6 +1,17 @@
 "use client";
 
 export type ProgressHandler = (percent: number, message: string) => void;
+export type AudioJoinOptions = { skipUnreadable?: boolean };
+export type AudioJoinResult = { blob?: Blob; filename: string; savedToDisk?: boolean; warnings: string[] };
+
+type BrowserWritable = {
+  write(data: BufferSource | Blob | { type: "write"; position: number; data: BufferSource | Blob }): Promise<void>;
+  close(): Promise<void>;
+  abort?(reason?: unknown): Promise<void>;
+};
+
+type BrowserSaveHandle = { createWritable(): Promise<BrowserWritable> };
+type SavePickerWindow = Window & { showSaveFilePicker?: (options: { suggestedName: string; types: Array<{ description: string; accept: Record<string, string[]> }> }) => Promise<BrowserSaveHandle> };
 
 export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -56,18 +67,118 @@ function audioBufferToWav(buffer: AudioBuffer) {
   return new Blob([arrayBuffer], { type: "audio/wav" });
 }
 
-export async function joinAudioFiles(files: File[], progress: ProgressHandler) {
+function writeText(view: DataView, offset: number, value: string) {
+  for (let index = 0; index < value.length; index += 1) view.setUint8(offset + index, value.charCodeAt(index));
+}
+
+function wavHeader(dataLength: bigint, channels: number, sampleRate: number, totalFrames: bigint) {
+  const bytesPerFrame = channels * 2;
+  if (dataLength <= 0xffff_ffffn - 36n) {
+    const buffer = new ArrayBuffer(44);
+    const view = new DataView(buffer);
+    writeText(view, 0, "RIFF"); view.setUint32(4, Number(36n + dataLength), true); writeText(view, 8, "WAVE");
+    writeText(view, 12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, channels, true);
+    view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * bytesPerFrame, true); view.setUint16(32, bytesPerFrame, true); view.setUint16(34, 16, true);
+    writeText(view, 36, "data"); view.setUint32(40, Number(dataLength), true);
+    return buffer;
+  }
+  const buffer = new ArrayBuffer(80);
+  const view = new DataView(buffer);
+  writeText(view, 0, "RF64"); view.setUint32(4, 0xffff_ffff, true); writeText(view, 8, "WAVE");
+  writeText(view, 12, "ds64"); view.setUint32(16, 28, true); view.setBigUint64(20, 72n + dataLength, true); view.setBigUint64(28, dataLength, true); view.setBigUint64(36, totalFrames, true); view.setUint32(44, 0, true);
+  writeText(view, 48, "fmt "); view.setUint32(52, 16, true); view.setUint16(56, 1, true); view.setUint16(58, channels, true);
+  view.setUint32(60, sampleRate, true); view.setUint32(64, sampleRate * bytesPerFrame, true); view.setUint16(68, bytesPerFrame, true); view.setUint16(70, 16, true);
+  writeText(view, 72, "data"); view.setUint32(76, 0xffff_ffff, true);
+  return buffer;
+}
+
+async function writePcm(buffer: AudioBuffer, channels: number, writable: BrowserWritable) {
+  const framesPerChunk = 32_768;
+  for (let start = 0; start < buffer.length; start += framesPerChunk) {
+    const frames = Math.min(framesPerChunk, buffer.length - start);
+    const bytes = new ArrayBuffer(frames * channels * 2);
+    const view = new DataView(bytes);
+    let offset = 0;
+    for (let frame = 0; frame < frames; frame += 1) {
+      for (let channel = 0; channel < channels; channel += 1) {
+        const source = buffer.getChannelData(Math.min(channel, buffer.numberOfChannels - 1));
+        const sample = Math.max(-1, Math.min(1, source[start + frame] ?? 0));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7fff, true);
+        offset += 2;
+      }
+    }
+    await writable.write(bytes);
+  }
+}
+
+async function joinAudioToDisk(files: File[], progress: ProgressHandler, options: AudioJoinOptions): Promise<AudioJoinResult> {
+  const picker = (window as SavePickerWindow).showSaveFilePicker;
+  if (!picker) throw new Error("This large job needs Chrome or Edge desktop so Trenith can stream the output directly to a file. Smaller jobs still work in other modern browsers.");
+  const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AudioContextClass) throw new Error("This browser does not support local audio processing.");
+  const filename = `${safeStem(files[0].name)}-joined.wav`;
+  const handle = await picker({ suggestedName: filename, types: [{ description: "WAV or RF64 audio", accept: { "audio/wav": [".wav"] } }] });
+  const writable = await handle.createWritable();
+  const context = new AudioContextClass({ sampleRate: 44_100 });
+  const valid: Array<{ file: File; frames: number; channels: number }> = [];
+  const warnings: string[] = [];
+  try {
+    for (let index = 0; index < files.length; index += 1) {
+      progress(Math.round((index / files.length) * 38), `Checking ${index + 1} of ${files.length}: ${files[index].name}`);
+      try {
+        const decoded = await context.decodeAudioData(await files[index].arrayBuffer());
+        valid.push({ file: files[index], frames: decoded.length, channels: decoded.numberOfChannels });
+      } catch {
+        warnings.push(`${files[index].name} could not be decoded by this browser.`);
+      }
+    }
+    if (warnings.length && !options.skipUnreadable) {
+      await writable.abort?.("Validation failed");
+      throw new Error(`${warnings[0]}${warnings.length > 1 ? ` Plus ${warnings.length - 1} more unreadable file${warnings.length === 2 ? "" : "s"}.` : ""} Enable “Skip unreadable files” to continue without them.`);
+    }
+    if (valid.length < 2) throw new Error("Fewer than two readable audio files remain after validation.");
+    const channels = Math.min(2, Math.max(...valid.map((item) => item.channels)));
+    const totalFrames = valid.reduce((total, item) => total + BigInt(item.frames), 0n);
+    const dataLength = totalFrames * BigInt(channels * 2);
+    await writable.write(wavHeader(dataLength, channels, context.sampleRate, totalFrames));
+    for (let index = 0; index < valid.length; index += 1) {
+      progress(40 + Math.round((index / valid.length) * 58), `Writing ${index + 1} of ${valid.length}: ${valid[index].file.name}`);
+      const decoded = await context.decodeAudioData(await valid[index].file.arrayBuffer());
+      await writePcm(decoded, channels, writable);
+    }
+    await writable.close();
+    progress(100, dataLength > 0xffff_ffffn ? "Large RF64-compatible WAV saved" : "Streaming WAV saved");
+    return { filename, savedToDisk: true, warnings };
+  } catch (error) {
+    await writable.abort?.(error).catch(() => undefined);
+    throw error;
+  } finally {
+    await context.close();
+  }
+}
+
+export async function joinAudioFiles(files: File[], progress: ProgressHandler, options: AudioJoinOptions = {}): Promise<AudioJoinResult> {
   if (files.length < 2) throw new Error("Choose at least two audio files to join.");
+  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+  const largeJob = files.length > 60 || totalBytes > 120 * 1024 * 1024;
+  if (largeJob) return joinAudioToDisk(files, progress, options);
   const AudioContextClass = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!AudioContextClass) throw new Error("This browser does not support local audio processing.");
 
   const context = new AudioContextClass({ sampleRate: 44_100 });
   try {
     const decoded: AudioBuffer[] = [];
+    const warnings: string[] = [];
     for (let index = 0; index < files.length; index += 1) {
       progress(Math.round((index / files.length) * 58), `Decoding ${files[index].name}`);
-      decoded.push(await context.decodeAudioData(await files[index].arrayBuffer()));
+      try { decoded.push(await context.decodeAudioData(await files[index].arrayBuffer())); }
+      catch {
+        warnings.push(`${files[index].name} could not be decoded by this browser.`);
+        if (!options.skipUnreadable) throw new Error(`${files[index].name} could not be decoded. Remove or replace it, or enable “Skip unreadable files”.`);
+      }
     }
+
+    if (decoded.length < 2) throw new Error("Fewer than two readable audio files remain after validation.");
 
     const channelCount = Math.min(2, Math.max(...decoded.map((buffer) => buffer.numberOfChannels)));
     const totalFrames = decoded.reduce((total, buffer) => total + buffer.length, 0);
@@ -85,7 +196,7 @@ export async function joinAudioFiles(files: File[], progress: ProgressHandler) {
     progress(94, "Encoding lossless WAV");
     const blob = audioBufferToWav(output);
     progress(100, "Audio join complete");
-    return { blob, filename: `${safeStem(files[0].name)}-joined.wav` };
+    return { blob, filename: `${safeStem(files[0].name)}-joined.wav`, warnings };
   } finally {
     await context.close();
   }

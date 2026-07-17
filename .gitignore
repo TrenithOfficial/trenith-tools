@@ -40,3 +40,5 @@ next-env.d.ts
 /.sites-runtime/
 /outputs/
 /work/
+/public/zeroperl.wasm
+/tsconfig.next.tsbuildinfo

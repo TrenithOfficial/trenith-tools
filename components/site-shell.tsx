@@ -4,22 +4,22 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
+import { openPrivacySettings } from "./consent-manager";
 
 const navigation = [
   ["Home", "/"],
   ["All Tools", "/tools"],
+  ["Privacy", "/tools?category=Privacy"],
   ["Audio", "/tools?category=Audio"],
-  ["Video", "/tools?category=Video"],
-  ["PDF", "/tools?category=PDF"],
-  ["Images", "/tools?category=Image"],
-  ["AI Studio", "/studio"],
+  ["Guides", "/guides"],
+  ["AI", "/studio"],
 ];
 
 const themes = [
-  ["orbit", "Cobalt", "#2f6bff"],
-  ["violet", "Violet", "#8b5cf6"],
-  ["cyan", "Cyan", "#16c7e8"],
-  ["ember", "Ember", "#ff6b5f"],
+  ["porcelain", "Porcelain", "#2855ff"],
+  ["citrus", "Citrus", "#ee6a30"],
+  ["lilac", "Lilac", "#7857d8"],
+  ["mint", "Mint", "#008f7a"],
 ];
 
 function isActive(pathname: string, href: string) {
@@ -32,17 +32,17 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const [themeOpen, setThemeOpen] = useState(false);
-  const [theme, setTheme] = useState("orbit");
+  const [theme, setTheme] = useState("porcelain");
 
   useEffect(() => {
-    const saved = localStorage.getItem("trenith-color-theme") || "orbit";
+    const stored = localStorage.getItem("trenith-color-theme");
+    const saved = themes.some(([id]) => id === stored) ? stored! : "porcelain";
     const frame = requestAnimationFrame(() => setTheme(saved));
     return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
-    localStorage.setItem("trenith-color-theme", theme);
   }, [theme]);
 
   return (
@@ -68,9 +68,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
         </div>
         {themeOpen && (
           <div className="color-menu" role="menu">
-            <strong>Interface signal</strong>
+            <strong>Accent palette</strong>
             {themes.map(([id, label, color]) => (
-              <button key={id} className={theme === id ? "selected" : ""} onClick={() => { setTheme(id); setThemeOpen(false); }} role="menuitem">
+              <button key={id} className={theme === id ? "selected" : ""} onClick={() => { setTheme(id); localStorage.setItem("trenith-color-theme", id); setThemeOpen(false); }} role="menuitem">
                 <i style={{ background: color }} />{label}<span>✓</span>
               </button>
             ))}
@@ -84,9 +84,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <Link className="footer-brand" href="/"><Image src="/trenith-lockup.png" width={150} height={55} alt="Trenith" /><span>Tools</span></Link>
             <p>Free media, document and AI-connected utilities built by Trenith Technologies Pvt Ltd.</p>
           </div>
-          <div className="footer-column"><strong>Tools</strong><Link href="/tools?category=Audio">Audio</Link><Link href="/tools?category=Video">Video</Link><Link href="/tools?category=PDF">PDF</Link><Link href="/tools?category=Image">Images</Link></div>
-          <div className="footer-column"><strong>Platform</strong><Link href="/studio">AI Studio</Link><Link href="/connections">BYOK Connections</Link><Link href="/about">About Trenith</Link><a href="https://trenith.com" target="_blank" rel="noreferrer">Trenith.com ↗</a></div>
-          <div className="footer-column"><strong>Trust</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/sitemap.xml">Sitemap</Link><a href="mailto:contact@trenith.com">Contact</a></div>
+          <div className="footer-column"><strong>Tools</strong><Link href="/tools/metadata-remover">Metadata remover</Link><Link href="/tools?category=Audio">Audio</Link><Link href="/tools?category=Video">Video</Link><Link href="/tools?category=PDF">PDF</Link><Link href="/tools?category=Image">Images</Link></div>
+          <div className="footer-column"><strong>Platform</strong><Link href="/studio">AI Studio</Link><Link href="/connections">BYOK Connections</Link><Link href="/guides">Guides</Link><Link href="/about">About Trenith</Link><a href="https://www.trenith.com/contact?utm_source=trenith_tools&utm_medium=product&utm_campaign=footer" target="_blank" rel="noreferrer">Build with Trenith ↗</a></div>
+          <div className="footer-column"><strong>Trust</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/cookies">Cookies</Link><button className="footer-settings" onClick={openPrivacySettings}>Privacy settings</button><Link href="/privacy-choices">Privacy choices</Link><Link href="/security">Security</Link><Link href="/sub-processors">Subprocessors</Link><Link href="/copyright">Copyright</Link><Link href="/accessibility">Accessibility</Link></div>
         </div>
         <div className="footer-bottom"><span>© 2026 Trenith Technologies Pvt Ltd</span><span>Co-authored by Sai Phanindra Manikanta Yalamanchili</span></div>
       </footer>

@@ -1,22 +1,29 @@
 # Trenith Tools
 
-> Free browser-based media, PDF, image, music and BYOK AI utilities built by Trenith Technologies Pvt Ltd.
+> Free private file utilities and BYOK AI workflows built by Trenith Technologies Private Limited (CIN U62099TS2026PTC216554) for India and worldwide.
 
-## Canonical pages
-- / — platform overview and FAQs
-- /tools — complete searchable tool directory
-- /connections — session-first and optional encrypted BYOK connection vault
-- /studio — AI provider request workspace
-- /about — company and authorship
-- /privacy — file, URL and key handling
-- /terms — responsible-use terms
+Canonical global site: https://tools.trenith.com
+India regional site: https://tools.trenith.in
+
+## Start here
+- /tools — searchable directory of every working tool
+- /tools/metadata-remover — local metadata inspection, removal and verification
+- /tools/audio-joiner — ordered file/folder joining with large-job streaming
+- /guides — practical file privacy, audio, PDF and BYOK explanations
+- /connections — session-first BYOK connection vault
+- /studio — real provider request workspace
+- /privacy — global data handling and rights notice
+- /security — architecture and reporting
 
 ## Capability labels
-- Processed on your device: source files stay in the visitor's browser for the operation.
-- Public web source: a server route inspects an authorized public URL for exposed audio links.
-- Uses your API key: the visitor connects an external provider account; provider terms, quotas and charges apply.
+- Processed on your device: selected source files stay in the visitor's browser for the operation.
+- Public web source: a Trenith route inspects a user-authorized public URL for exposed audio links.
+- Uses your API key: the visitor connects an external provider account; provider privacy, terms, quotas and charges apply.
 
-## Important limits
-- There is no artificial Trenith file-count limit, but device memory, storage and browser codec support remain practical limits.
+## Important facts
+- Trenith Tools has no subscription price or artificial file-count quota. Device capacity, codec support, free storage and individual file health are practical limits.
+- Large audio jobs stream to a user-selected disk destination in compatible desktop browsers.
+- Trenith does not sell personal data, file contents, BYOK keys, prompts or outputs.
+- The metadata remover supports ExifTool-compatible formats but cannot guarantee removal of proprietary or visible traces.
 - The public source scanner does not bypass authentication, DRM or platform access controls.
-- Trenith does not bundle AI credits or promise that every third-party provider supports every workflow.
+- Provider-dependent features require a compatible user-owned key; no generation credits are bundled.
