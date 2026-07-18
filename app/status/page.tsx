@@ -18,6 +18,10 @@ const engineNotes: Record<string, string> = {
   "audio-volume-changer": "Web Audio with FFmpeg compatibility fallback · WAV output",
   "video-joiner": "Canvas + MediaRecorder · output and input codec support varies by browser",
   "compress-pdf": "Structural PDF optimization · not a claim of lossy image recompression",
+  "text-to-speech": "Browser speech synthesis with no key · ElevenLabs or a compatible endpoint for downloadable MP3",
+  "ocr-pdf": "Vision request through your OpenAI, Gemini or Anthropic key · JPG/PNG/WebP up to 3 MB",
+  "serp-snippet-preview": "Local snippet renderer · character and approximate pixel checks",
+  "keyword-density-analyzer": "Local text analysis · counts, densities, readability estimate and question detection",
 };
 
 function engineNote(slug: string, category: string, kind: string) {

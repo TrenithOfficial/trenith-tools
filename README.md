@@ -14,7 +14,9 @@ A free, light-first, device-focused workspace for file privacy, media, PDFs, ima
 - PDF merge, split-to-ZIP, page extraction, rotation, page numbers, watermarking and structural optimization
 - JPG/PNG to PDF
 - Image resize, compression and JPG/PNG/WebP conversion
-- Searchable privacy, audio, video, PDF, image, music and AI directory with 42 dedicated tool pages
+- Searchable privacy, audio, video, PDF, image, music, SEO and AI directory with 44 dedicated tool pages
+- Free on-device SEO tools: SERP snippet preview with length checks and a keyword density, readability and question analyzer
+- AI Studio runs every workflow with any connected key — text models produce structured plans for media jobs, browser voices speak text with no key at all, and vision-capable keys read text from scans
 - Free BYOK Connections Vault and AI Studio for OpenAI, Anthropic, Gemini, ElevenLabs, OpenRouter and compatible endpoints
 - Compatible endpoint media jobs support JSON briefs and multipart source-file uploads
 - Consent-gated Vercel/Google analytics and marketing measurement with Global Privacy Control support

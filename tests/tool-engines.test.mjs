@@ -55,3 +55,14 @@ test("audio conversion profiles expose six concrete encoders", () => {
   assert.match(audioProfiles.m4a.args(192).join(" "), /\baac\b/);
   assert.equal(audioProfiles.flac.lossless, true);
 });
+
+test("catalog publishes 44 unique tools including the free SEO utilities", async () => {
+  const { tools, categories } = await import("../lib/catalog.ts");
+  assert.equal(tools.length, 44);
+  assert.equal(new Set(tools.map((tool) => tool.slug)).size, 44);
+  const serp = tools.find((tool) => tool.slug === "serp-snippet-preview");
+  const density = tools.find((tool) => tool.slug === "keyword-density-analyzer");
+  assert.equal(serp?.kind, "device");
+  assert.equal(density?.kind, "device");
+  assert.ok(categories.includes("SEO"));
+});

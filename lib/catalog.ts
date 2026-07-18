@@ -1,5 +1,5 @@
 export type ToolKind = "device" | "byok" | "web";
-export type ToolCategory = "Audio" | "Video" | "PDF" | "Image" | "Privacy" | "AI Studio" | "Music";
+export type ToolCategory = "Audio" | "Video" | "PDF" | "Image" | "Privacy" | "AI Studio" | "Music" | "SEO";
 
 export type ToolDefinition = {
   slug: string;
@@ -126,6 +126,16 @@ export const tools: ToolDefinition[] = [
     steps: ["Set BPM and beats per bar", "Start the metronome", "Practice with the accented downbeat"],
   },
   {
+    slug: "serp-snippet-preview", name: "SERP Snippet Preview", shortName: "SERP Preview", category: "SEO", kind: "device", icon: "⌕", accent: "blue",
+    description: "Preview how a page title, URL and meta description render in Google-style desktop and mobile results, with character and approximate pixel limits checked on your device.",
+    steps: ["Enter the page title, URL and meta description", "Review the live desktop and mobile snippet preview", "Adjust the text until every length check passes"],
+  },
+  {
+    slug: "keyword-density-analyzer", name: "Keyword Density & Content Analyzer", shortName: "Keyword Density", category: "SEO", kind: "device", icon: "%", accent: "lime",
+    description: "Analyze pasted text for word counts, reading time, readability, top keyword and phrase densities and the questions it already answers — entirely in your browser.",
+    steps: ["Paste the draft or published copy", "Review counts, readability and keyword densities", "Balance overused terms and cover missing questions"],
+  },
+  {
     slug: "ai-song-generator", name: "AI Song Generator", shortName: "Song Generator", category: "AI Studio", kind: "byok", icon: "✦", accent: "violet",
     description: "Send a structured song brief to your connected music provider or compatible generation endpoint.",
     steps: ["Connect your provider key", "Write a style, mood and lyric brief", "Generate through your own provider account"],
@@ -230,7 +240,7 @@ export const tools: ToolDefinition[] = [
 export const toolBySlug = Object.fromEntries(tools.map((tool) => [tool.slug, tool])) as Record<string, ToolDefinition>;
 export const quickToolSlugs = ["metadata-remover", "audio-downloader", "audio-converter", "audio-joiner", "merge-pdf", "image-converter"];
 export const quickTools = quickToolSlugs.map((slug) => toolBySlug[slug]);
-export const categories: Array<"All" | ToolCategory> = ["All", "Privacy", "Audio", "Video", "PDF", "Image", "Music", "AI Studio"];
+export const categories: Array<"All" | ToolCategory> = ["All", "Privacy", "Audio", "Video", "PDF", "Image", "Music", "SEO", "AI Studio"];
 
 export function kindLabel(kind: ToolKind) {
   if (kind === "device") return "Processed on your device";

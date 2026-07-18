@@ -1,8 +1,31 @@
 import type { Metadata } from "next";
 import { ConsentManager } from "../components/consent-manager";
+import { JsonLd } from "../components/json-ld";
 import { SiteShell } from "../components/site-shell";
 import { alternateUrls, baseDescription, COMPANY_NAME, siteLanguage, siteUrl } from "../lib/site";
 import "./globals.css";
+
+const organizationStructuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": "https://trenith.com/#organization",
+    name: COMPANY_NAME,
+    url: "https://trenith.com",
+    logo: siteUrl("/trenith-mark.png"),
+    address: { "@type": "PostalAddress", addressLocality: "Hyderabad", addressRegion: "Telangana", addressCountry: "IN" },
+    sameAs: ["https://www.trenith.com", "https://github.com/TrenithOfficial"],
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Trenith Tools",
+    url: siteUrl("/"),
+    description: baseDescription,
+    publisher: { "@id": "https://trenith.com/#organization" },
+    inLanguage: siteLanguage,
+  },
+];
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl("/")),
@@ -37,7 +60,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang={siteLanguage}>
-      <body><SiteShell>{children}</SiteShell><ConsentManager /></body>
+      <body><JsonLd data={organizationStructuredData} /><SiteShell>{children}</SiteShell><ConsentManager /></body>
     </html>
   );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { ToolDefinition } from "../lib/catalog";
 import { MetadataScrubber } from "./metadata-scrubber";
+import { SeoUtility } from "./seo-tools";
 import {
   changeAudioVolume,
   downloadBlob,
@@ -58,6 +59,7 @@ export function ToolWorkspace({ tool }: { tool: ToolDefinition }) {
   if (tool.kind === "byok") return <ByokWorkspace tool={tool} />;
   if (tool.slug === "audio-downloader") return <DownloaderWorkspace />;
   if (["tap-bpm", "bpm-delay-calculator", "note-frequency", "metronome"].includes(tool.slug)) return <MusicUtility slug={tool.slug} />;
+  if (tool.category === "SEO") return <SeoUtility slug={tool.slug} />;
   return <FileWorkspace tool={tool} />;
 }
 

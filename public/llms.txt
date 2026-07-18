@@ -11,6 +11,8 @@ India regional site: https://tools.trenith.in
 - /tools/audio-joiner — ordered file/folder joining with large-job streaming
 - /tools/audio-converter — private MP3, WAV, FLAC, Ogg, Opus and M4A/AAC conversion
 - /tools/audio-trimmer — exact time-range cutting with WAV output
+- /tools/serp-snippet-preview — free on-device SERP snippet and meta length preview
+- /tools/keyword-density-analyzer — free on-device keyword density, readability and question analysis
 - /guides/convert-audio-formats-in-browser — audio format and quality guidance
 - /status — capability, engine and practical-dependency matrix for every tool
 - /changelog — verified product release notes and RSS feed

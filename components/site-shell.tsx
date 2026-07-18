@@ -12,7 +12,7 @@ const navigation = [
   ["Status", "/status"],
   ["Audio", "/tools?category=Audio"],
   ["Guides", "/guides"],
-  ["AI", "/studio"],
+  ["AI Studio", "/studio"],
 ];
 
 const themes = [

@@ -76,7 +76,7 @@ test("publishes machine-readable tool and release discovery", async () => {
   const catalog = await worker.fetch(new Request("http://localhost/api/tools"), environment, context);
   assert.equal(catalog.status, 200);
   const data = await catalog.json();
-  assert.equal(data.count, 42);
+  assert.equal(data.count, 44);
   assert.ok(data.tools.some((tool) => tool.slug === "audio-converter" && /FLAC/.test(tool.description)));
   const feed = await worker.fetch(new Request("http://localhost/feed.xml"), environment, context);
   assert.equal(feed.status, 200);
@@ -87,7 +87,7 @@ test("publishes machine-readable tool and release discovery", async () => {
 test("every published tool has a working, titled HTML route", async () => {
   const catalogResponse = await worker.fetch(new Request("http://localhost/api/tools"), environment, context);
   const { tools } = await catalogResponse.json();
-  assert.equal(tools.length, 42);
+  assert.equal(tools.length, 44);
   for (const tool of tools) {
     const response = await worker.fetch(new Request(`http://localhost/tools/${tool.slug}`, { headers: { accept: "text/html" } }), environment, context);
     const html = await response.text();
