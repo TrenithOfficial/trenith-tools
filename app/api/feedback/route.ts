@@ -50,7 +50,10 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({ text: `Trenith Tools feedback (${category}) on ${page}:\n${message}\nReply: ${submission.email}`, ...submission }),
         });
         if (delivered.ok) return NextResponse.json({ ok: true });
-      } catch { /* fall through to the mail fallback */ }
+        // Log why a configured channel fell back so delivery can be debugged
+        // from Vercel logs without exposing anything to the visitor.
+        console.error(`[feedback] webhook delivery failed: HTTP ${delivered.status} ${(await delivered.text().catch(() => "")).slice(0, 300)}`);
+      } catch (error) { console.error(`[feedback] webhook request threw: ${error instanceof Error ? error.message : String(error)}`); }
     }
 
     const resendKey = process.env.RESEND_API_KEY;
@@ -62,12 +65,17 @@ export async function POST(request: NextRequest) {
           body: JSON.stringify({
             from: process.env.FEEDBACK_EMAIL_FROM || "Trenith Tools <onboarding@resend.dev>",
             to: [emailTo],
+            reply_to: submission.email !== "not provided" ? submission.email : undefined,
             subject: `Tools feedback · ${category} · ${page}`,
             text: `${message}\n\nPage: ${page}\nReply to: ${submission.email}\nUser agent: ${submission.userAgent}\nReceived: ${submission.receivedAt}`,
           }),
         });
         if (delivered.ok) return NextResponse.json({ ok: true });
-      } catch { /* fall through to the mail fallback */ }
+        // Common cause: the default onboarding@resend.dev sender only delivers to
+        // the Resend account's own email, or FEEDBACK_EMAIL_FROM's domain isn't
+        // verified. The exact reason from Resend is logged here.
+        console.error(`[feedback] Resend delivery failed: HTTP ${delivered.status} ${(await delivered.text().catch(() => "")).slice(0, 300)}`);
+      } catch (error) { console.error(`[feedback] Resend request threw: ${error instanceof Error ? error.message : String(error)}`); }
     }
 
     // No channel configured, or the configured one failed: let the widget open

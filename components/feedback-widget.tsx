@@ -97,7 +97,7 @@ export function FeedbackWidget() {
         <label>Reply email (optional)<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} maxLength={200} placeholder="you@example.com" autoComplete="email" /></label>
         <input className="feedback-website" type="text" value={website} onChange={(event) => setWebsite(event.target.value)} tabIndex={-1} autoComplete="off" aria-hidden="true" placeholder="Leave this empty" />
         {error && <div className="workspace-error" role="alert">{error}</div>}
-        <button className="primary-action" disabled={busy}>{busy ? "Sending…" : "Send feedback"}<span>→</span></button>
+        <button type="submit" className="primary-action" disabled={busy}>{busy ? "Sending…" : "Send feedback"}<span>→</span></button>
         <small>Includes the current page path so the report has context. No file contents or keys are ever attached.</small>
       </form>}
     </div>}
