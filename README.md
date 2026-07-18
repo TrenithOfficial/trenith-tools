@@ -27,7 +27,7 @@ Advanced music generation, stem separation, OCR, Office conversion and similar c
 
 ## Development
 
-Requirements: Node.js 22.13 or newer.
+Requirements: Node.js 24.13 or newer.
 
 ```bash
 npm ci
