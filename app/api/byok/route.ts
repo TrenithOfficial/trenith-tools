@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { allowRequest, clientKey } from "../../../lib/rate-limit";
+import { anthropicDelta, geminiDelta, openaiDelta, sseToTextStream, type SseExtractor } from "../../../lib/sse";
 
 export const runtime = "edge";
 
@@ -15,6 +16,18 @@ async function providerError(response: Response) {
     const body = await response.json() as { error?: { message?: string } | string; message?: string };
     return typeof body.error === "string" ? body.error : body.error?.message || body.message || `Provider returned HTTP ${response.status}.`;
   } catch { return `Provider returned HTTP ${response.status}.`; }
+}
+
+// Text generations are streamed so the edge function can flush its initial
+// response well within Vercel's 25s limit while the model keeps producing
+// tokens; buffering the whole answer server-side previously timed out long
+// generations. The provider request already ran and returned an OK status, so
+// this only forwards the body as decoded text deltas.
+function streamedText(response: Response, extract: SseExtractor) {
+  if (!response.body) return NextResponse.json({ error: "The provider returned no response body." }, { status: 502, headers: { "cache-control": "no-store" } });
+  return new Response(sseToTextStream(response.body, extract), {
+    headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store", "x-accel-buffering": "no" },
+  });
 }
 
 const MAX_IMAGE_DATA_URL = 4_500_000;
@@ -57,24 +70,21 @@ export async function POST(request: NextRequest) {
     if (provider === "openai" || provider === "openrouter") {
       const endpoint = provider === "openai" ? "https://api.openai.com/v1/chat/completions" : "https://openrouter.ai/api/v1/chat/completions";
       const content = image ? [{ type: "text", text: prompt }, { type: "image_url", image_url: { url: `data:${image.mime};base64,${image.base64}` } }] : prompt;
-      response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}`, ...(provider === "openrouter" ? { "HTTP-Referer": "https://trenith.com", "X-Title": "Trenith Tools" } : {}) }, body: JSON.stringify({ model, messages: [{ role: "user", content }] }) });
+      response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}`, ...(provider === "openrouter" ? { "HTTP-Referer": "https://trenith.com", "X-Title": "Trenith Tools" } : {}) }, body: JSON.stringify({ model, stream: true, messages: [{ role: "user", content }] }) });
       if (!response.ok) throw new Error(await providerError(response));
-      const data = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
-      return NextResponse.json({ ok: true, text: data.choices?.[0]?.message?.content || "The provider returned no text." });
+      return streamedText(response, openaiDelta);
     }
     if (provider === "anthropic") {
       const content = image ? [{ type: "text", text: prompt }, { type: "image", source: { type: "base64", media_type: image.mime, data: image.base64 } }] : prompt;
-      response = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model, max_tokens: 1600, messages: [{ role: "user", content }] }) });
+      response = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "content-type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model, stream: true, max_tokens: 8192, messages: [{ role: "user", content }] }) });
       if (!response.ok) throw new Error(await providerError(response));
-      const data = await response.json() as { content?: Array<{ type?: string; text?: string }> };
-      return NextResponse.json({ ok: true, text: data.content?.filter((item) => item.type === "text").map((item) => item.text).join("\n") || "The provider returned no text." });
+      return streamedText(response, anthropicDelta);
     }
     if (provider === "gemini") {
       const parts = image ? [{ text: prompt }, { inline_data: { mime_type: image.mime, data: image.base64 } }] : [{ text: prompt }];
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify({ contents: [{ parts }] }) });
+      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:streamGenerateContent?alt=sse`, { method: "POST", headers: { "content-type": "application/json", "x-goog-api-key": apiKey }, body: JSON.stringify({ contents: [{ parts }] }) });
       if (!response.ok) throw new Error(await providerError(response));
-      const data = await response.json() as { candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }> };
-      return NextResponse.json({ ok: true, text: data.candidates?.[0]?.content?.parts?.map((part) => part.text).join("\n") || "The provider returned no text." });
+      return streamedText(response, geminiDelta);
     }
     const voiceId = String(body.voiceId || "").trim();
     if (!voiceId) throw new Error("Add an ElevenLabs voice ID in Connections.");

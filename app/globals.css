@@ -18,6 +18,7 @@
   --danger: #c83950;
   --shadow: 0 28px 80px rgba(38, 31, 18, .13);
   --radius: 22px;
+  color-scheme: light;
 }
 
 :focus-visible { outline: 3px solid rgba(var(--accent-rgb), .55); outline-offset: 3px; }
@@ -164,8 +165,6 @@ h1 em, h2 em { color: #788194; font-style: normal; font-weight: inherit; }
 .faq-list { border-top: 1px solid var(--line); }
 .faq-list details { border-bottom: 1px solid var(--line); }
 .faq-list summary { padding: 22px 2px; display: flex; justify-content: space-between; gap: 20px; cursor: pointer; list-style: none; font-size: 15px; font-weight: 700; }
-.faq-list summary span { color: var(--accent-2); }
-.faq-list details[open] summary span { transform: rotate(45deg); }
 .faq-list p { margin: -6px 0 23px; color: var(--muted); font-size: 14px; line-height: 1.7; }
 
 .directory-hero { padding: 115px 0 70px; }
@@ -310,7 +309,7 @@ h1 em, h2 em { color: #788194; font-style: normal; font-weight: inherit; }
 .feedback-widget { position: fixed; right: 18px; bottom: 18px; z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
 .feedback-trigger { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-radius: 999px; border: 1px solid var(--line); background: linear-gradient(135deg, var(--accent), var(--accent-3)); color: #fff; font-size: 13.5px; font-weight: 750; cursor: pointer; box-shadow: 0 14px 40px rgba(var(--accent-rgb), .35); }
 .feedback-trigger:hover { transform: translateY(-1px); }
-.feedback-panel { width: min(330px, calc(100vw - 36px)); max-height: min(520px, calc(100vh - 110px)); overflow: auto; padding: 17px !important; border-radius: 15px; box-shadow: 0 30px 80px rgba(0,0,0,.25); }
+.feedback-panel { width: min(370px, calc(100vw - 32px)); max-height: min(560px, calc(100vh - 104px)); overflow: auto; padding: 18px !important; border-radius: 15px; box-shadow: 0 30px 80px rgba(0,0,0,.25); }
 .feedback-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .feedback-head strong { font-size: 14px; }
 .feedback-head button { width: 28px; height: 28px; display: inline-grid; place-items: center; border-radius: 7px; background: rgba(127,127,127,.12); cursor: pointer; color: var(--soft); }
@@ -318,21 +317,26 @@ h1 em, h2 em { color: #788194; font-style: normal; font-weight: inherit; }
 .feedback-icon { display: inline-flex; width: 17px; height: 17px; }
 .feedback-icon svg { width: 100%; height: 100%; }
 .feedback-done .primary-action { width: 100%; margin: 4px 0 2px; justify-content: center; }
-.feedback-panel form > p { margin: 8px 0 10px; color: var(--muted); font-size: 12px; line-height: 1.55; }
-.feedback-categories { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px; }
-.feedback-categories button { padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--soft); font-size: 12px; cursor: pointer; }
-.feedback-categories button.active { border-color: rgba(var(--accent-rgb), .6); background: rgba(var(--accent-rgb), .08); color: var(--accent-2); font-weight: 700; }
-.feedback-panel label { display: block; margin-top: 9px; font-size: 12px; color: var(--soft); }
-.feedback-panel textarea, .feedback-panel label input { width: 100%; margin-top: 5px; padding: 9px; font-size: 13.5px; }
+.feedback-panel form > p { margin: 9px 0 11px; color: var(--soft); font-size: 13px; line-height: 1.55; }
+.feedback-categories { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 11px; }
+.feedback-categories button { padding: 9px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--soft); font-size: 13px; font-weight: 600; cursor: pointer; }
+.feedback-categories button.active { border-color: rgba(var(--accent-rgb), .6); background: rgba(var(--accent-rgb), .08); color: var(--accent-2); font-weight: 750; }
+.feedback-panel label { display: block; margin-top: 11px; font-size: 13px; font-weight: 650; color: var(--text); }
+.feedback-panel textarea, .feedback-panel label input { width: 100%; margin-top: 6px; padding: 10px 11px; font-size: 14px; color: var(--text); background: var(--surface-high); border: 1px solid var(--line-strong); border-radius: 9px; }
+.feedback-panel textarea::placeholder, .feedback-panel label input::placeholder { color: var(--muted); }
+.feedback-panel textarea:focus, .feedback-panel label input:focus { outline: none; border-color: rgba(var(--accent-rgb), .65); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), .16); }
 .feedback-panel textarea { resize: vertical; line-height: 1.55; }
 .feedback-website { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
-.feedback-panel .primary-action { width: 100%; margin-top: 12px; justify-content: center; }
-.feedback-panel form small { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.5; }
-.feedback-fallback { margin-top: 9px; padding: 9px; border: 1px solid rgba(var(--accent-rgb), .3); border-radius: 8px; background: rgba(var(--accent-rgb), .06); font-size: 12px; line-height: 1.55; }
-.feedback-fallback a { color: var(--accent-2); font-weight: 700; }
-.feedback-done { display: grid; justify-items: center; text-align: center; gap: 8px; padding: 18px 6px; }
+.feedback-panel .primary-action { width: 100%; margin-top: 13px; justify-content: center; }
+.feedback-panel form small { display: block; margin-top: 9px; color: var(--soft); font-size: 12.5px; line-height: 1.5; }
+.feedback-send-actions { display: grid; grid-template-columns: 1fr; gap: 8px; width: 100%; margin: 4px 0 2px; }
+.feedback-send-actions .primary-action, .feedback-send-actions .secondary-button { width: 100%; margin: 0; justify-content: center; }
+.feedback-address { font-size: 12.5px; color: var(--soft); }
+.feedback-address a { color: var(--accent-2); font-weight: 700; }
+.feedback-done { display: grid; justify-items: center; text-align: center; gap: 9px; padding: 16px 6px 8px; }
 .feedback-done span { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 50%; background: rgba(46,160,90,.14); color: var(--good); font-size: 19px; }
-.feedback-done p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+.feedback-done p { margin: 0; color: var(--soft); font-size: 13.5px; line-height: 1.6; }
+.feedback-done .text-button { color: var(--muted); font-size: 13px; cursor: pointer; background: transparent; text-decoration: underline; }
 @media (max-width: 640px) { .feedback-widget { right: 12px; bottom: 12px; } .feedback-trigger span { display: none; } .feedback-trigger { padding: 12px 14px; } }
 .studio-field > input[type="file"] { width: 100%; margin-top: 8px; padding: 12px; border: 1px dashed var(--line-strong); border-radius: 10px; background: rgba(255,255,255,.4); font-size: 13px; }.studio-field > small { margin-top: 6px; display: block; color: var(--muted); font-size: 12px; }
 
@@ -571,3 +575,35 @@ h1 em,h2 em { color: #77727d; }
   .time-grid { grid-template-columns: 1fr; }.time-grid small { grid-column: auto; }
   .status-legend { grid-template-columns: 1fr; }.status-table-row { grid-template-columns: 1fr; }.status-table-row .capability-chip { justify-self: start; }.status-table-row > p { grid-column: auto; }.changelog-list > article { padding: 22px; }
 }
+
+
+/* --- Audit design fixes (readability + new controls) --- */
+/* Explicit light surfaces so SEO, Studio and Vault fields never render as dark
+   native controls on dark-mode devices (belt-and-suspenders with color-scheme). */
+.seo-workspace input, .seo-workspace textarea, .density-input,
+.studio-field input, .studio-field select, .studio-field textarea,
+.encrypted-panel input {
+  background: var(--surface-high);
+  color: var(--text);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+}
+.seo-copy { margin-top: 12px; }
+
+/* Feedback panel: fully opaque so page content can never bleed through the form
+   (the reported "hard to read" cause), lifted above a dimming scrim that also
+   catches an outside click to close. Higher specificity than .workspace-panel's
+   translucent surface so the solid background always wins. */
+.feedback-scrim { position: fixed; inset: 0; z-index: 58; border: 0; padding: 0; margin: 0; cursor: default; background: rgba(15, 14, 20, .42); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); animation: feedback-scrim-in .16s ease-out; }
+@keyframes feedback-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+.feedback-widget .feedback-panel { position: relative; z-index: 62; background: var(--surface-solid); -webkit-backdrop-filter: none; backdrop-filter: none; }
+.feedback-widget .feedback-trigger { position: relative; z-index: 62; }
+.feedback-head strong { font-size: 15px; }
+.feedback-done-title { font-size: 15.5px; color: var(--text); }
+
+/* Metadata rows: a visible download the moment a file is cleaned, no expand. */
+.metadata-row-head { display: flex; align-items: center; gap: 8px; }
+.metadata-row-head .metadata-summary { flex: 1; }
+.metadata-row-download { flex-shrink: 0; padding: 8px 12px; border: 1px solid rgba(var(--accent-rgb), .4); border-radius: 9px; background: rgba(var(--accent-rgb), .08); color: var(--accent-2); font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.metadata-row-download:hover { background: rgba(var(--accent-rgb), .14); }
+.tool-search-count { flex-shrink: 0; padding: 3px 9px; border-radius: 999px; background: rgba(127,127,127,.14); color: var(--muted); font-size: 12.5px; font-weight: 700; }

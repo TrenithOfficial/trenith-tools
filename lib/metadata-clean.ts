@@ -24,6 +24,24 @@ export function cleanerFor(name: string): CleanerRoute {
   return "exiftool";
 }
 
+// ExifTool can READ far more formats than it can safely REWRITE. A read-only
+// format (BMP, EPUB, RTF, SVG, TXT, HTML, most archives) scans fine but throws
+// at write time, leaving the user with a "removable fields" count and no
+// download. Only these extensions are actually writable through the exiftool
+// route; the pdf/ooxml/media routes always produce output.
+const exiftoolWritable = new Set([
+  "jpg", "jpeg", "jpe", "jfif", "tif", "tiff", "png", "webp", "gif", "heic", "heif",
+  "jp2", "j2k", "psd", "dng", "cr2", "cr3", "nef", "nrw", "arw", "sr2", "srf", "orf",
+  "raf", "rw2", "pef", "mrw", "mp4", "m4v", "mov", "m4a", "3gp", "3g2", "mie", "exv", "xmp",
+]);
+
+// Whether metadata removal can actually produce a cleaned, downloadable file for
+// this name. Used to mark inspect-only formats up front instead of promising a
+// clean that fails.
+export function canCleanMetadata(name: string): boolean {
+  return cleanerFor(name) !== "exiftool" || exiftoolWritable.has(extensionOf(name));
+}
+
 export async function stripWithExiftool(file: File, wasmFetch: WasmFetch): Promise<Blob> {
   const { writeMetadata, dispose } = await import("@uswriting/exiftool");
   // The library appends its own -o output argument, so -overwrite_original must

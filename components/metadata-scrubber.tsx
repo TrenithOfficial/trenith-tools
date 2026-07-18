@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { downloadBlob } from "../lib/client-tools";
-import { stripFileMetadata } from "../lib/metadata-clean";
+import { canCleanMetadata, stripFileMetadata } from "../lib/metadata-clean";
 
 type MetadataValue = string | number | boolean | null | MetadataValue[] | { [key: string]: MetadataValue };
 type MetadataMap = Record<string, MetadataValue>;
@@ -16,7 +16,10 @@ type ScrubItem = {
   error?: string;
 };
 
-const operationalGroups = new Set(["ExifTool", "File", "System", "Composite"]);
+// Excludes ExifTool's own tags plus structural/container groups that describe
+// the file format (dimensions, bit depth, colour profile) rather than private
+// authorship or location metadata, so the "removable fields" count is honest.
+const operationalGroups = new Set(["ExifTool", "File", "System", "Composite", "JFIF", "ICC_Profile", "ICC-header", "PNG", "JPEG", "GIF", "BMP", "MPF", "FlashPix"]);
 const wasmFetch = async () => window.fetch("/zeroperl.wasm", { cache: "force-cache" });
 
 function displayValue(value: MetadataValue) {
@@ -39,7 +42,7 @@ function statusLabel(item: ScrubItem) {
   if (item.status === "ready") return `${item.before.length} removable field${item.before.length === 1 ? "" : "s"}`;
   if (item.status === "cleaning") return "Removing metadata";
   if (item.status === "clean") return `${Math.max(0, item.before.length - item.after.length)} fields removed · ${item.after.length} remain`;
-  if (item.status === "unsupported") return "No safe writable metadata handler";
+  if (item.status === "unsupported") return item.before.length ? `${item.before.length} field${item.before.length === 1 ? "" : "s"} detected · inspect only (format cannot be rewritten in-browser)` : "No readable or writable metadata";
   return item.error || "Processing failed";
 }
 
@@ -59,7 +62,10 @@ export function MetadataScrubber() {
       setEngineReady(true);
       const result = await parseMetadata<MetadataMap[]>(item.file, { args: ["-json", "-G1", "-s", "-n"], fetch: wasmFetch, transform: (value) => JSON.parse(value) as MetadataMap[] });
       if (!result.success) throw new Error(result.error);
-      update(item.id, { status: "ready", before: privateMetadata(result.data[0]) });
+      // Only promise a clean for formats the engine can actually rewrite; a
+      // read-only format is shown as inspect-only rather than "ready" so the
+      // user is never offered a removal that would fail with no download.
+      update(item.id, { status: canCleanMetadata(item.file.name) ? "ready" : "unsupported", before: privateMetadata(result.data[0]) });
     } catch (caught) {
       update(item.id, { status: "unsupported", error: caught instanceof Error ? caught.message : "The file format could not be inspected." });
     }
@@ -76,15 +82,22 @@ export function MetadataScrubber() {
 
   async function cleanOne(item: ScrubItem) {
     update(item.id, { status: "cleaning", error: undefined });
+    let blob: Blob;
     try {
-      const blob = await stripFileMetadata(item.file, wasmFetch);
+      blob = await stripFileMetadata(item.file, wasmFetch);
+    } catch (caught) {
+      update(item.id, { status: "error", error: caught instanceof Error ? caught.message : "Metadata removal failed." });
+      return;
+    }
+    // Commit the downloadable output before verifying, so a re-inspection error
+    // can never discard an already-cleaned file.
+    update(item.id, { status: "clean", output: blob, after: [] });
+    try {
       const { parseMetadata } = await import("@uswriting/exiftool");
       const verificationFile = new File([blob], item.file.name, { type: item.file.type, lastModified: Date.now() });
       const verified = await parseMetadata<MetadataMap[]>(verificationFile, { args: ["-json", "-G1", "-s", "-n"], fetch: wasmFetch, transform: (value) => JSON.parse(value) as MetadataMap[] });
-      update(item.id, { status: "clean", output: blob, after: verified.success ? privateMetadata(verified.data[0]) : [] });
-    } catch (caught) {
-      update(item.id, { status: "error", error: caught instanceof Error ? caught.message : "Metadata removal failed." });
-    }
+      if (verified.success) update(item.id, { after: privateMetadata(verified.data[0]) });
+    } catch { /* keep the cleaned output even if re-inspection fails */ }
   }
 
   async function cleanAll() {
@@ -113,8 +126,8 @@ export function MetadataScrubber() {
 
     {items.length > 0 && <section className="workspace-panel metadata-results">
       <div className="metadata-results-head"><div><span className="panel-label">INSPECTION REPORT</span><h2>{items.length} file{items.length === 1 ? "" : "s"}</h2></div><div><button className="secondary-button" onClick={() => setItems([])} disabled={busy}>Clear</button><button className="primary-action" onClick={cleanAll} disabled={busy || !items.some((item) => item.status === "ready" || item.status === "error")}>{busy ? "Working…" : "Remove detected metadata"}<span>→</span></button></div></div>
-      <div className="metadata-list">{items.map((item) => <article key={item.id} className={`metadata-row ${item.status}`}><button className="metadata-summary" onClick={() => setExpanded(expanded === item.id ? null : item.id)}><span className="metadata-file-icon">{item.file.name.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE"}</span><div><strong>{item.file.webkitRelativePath || item.file.name}</strong><small>{(item.file.size / 1024 / 1024).toFixed(2)} MB · {statusLabel(item)}</small></div><b>{expanded === item.id ? "−" : "+"}</b></button>{expanded === item.id && <div className="metadata-details">{item.error && <p className="metadata-warning">{item.error}</p>}{item.before.length ? <><h3>Detected before cleaning</h3><dl>{item.before.slice(0, 100).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>{item.before.length > 100 && <p>Showing 100 of {item.before.length} fields.</p>}</> : <p>No removable metadata fields were detected.</p>}{item.status === "clean" && <p className="metadata-clean-note">Verification complete: {item.after.length} non-operational metadata fields remain.</p>}{item.status === "clean" && item.after.length > 0 && <><h3>Remaining after cleaning</h3><dl>{item.after.slice(0, 100).map(([key, value]) => <div key={`after-${key}`}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></>}<div className="metadata-row-actions">{item.status === "ready" && <button className="secondary-button" onClick={() => cleanOne(item)}>Clean this file</button>}{item.output && <button className="secondary-button" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)}>Download cleaned file</button>}</div></div>}</article>)}</div>
-      {items.some((item) => item.output) && <button className="workspace-run" onClick={downloadZip}>Download all cleaned files as ZIP <span>↓</span></button>}
+      <div className="metadata-list">{items.map((item) => <article key={item.id} className={`metadata-row ${item.status}`}><div className="metadata-row-head"><button className="metadata-summary" onClick={() => setExpanded(expanded === item.id ? null : item.id)}><span className="metadata-file-icon">{item.file.name.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE"}</span><div><strong>{item.file.webkitRelativePath || item.file.name}</strong><small>{(item.file.size / 1024 / 1024).toFixed(2)} MB · {statusLabel(item)}</small></div><b>{expanded === item.id ? "−" : "+"}</b></button>{item.output && <button className="metadata-row-download" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)} aria-label={`Download cleaned ${item.file.name}`}>Download ↓</button>}</div>{expanded === item.id && <div className="metadata-details">{item.error && <p className="metadata-warning">{item.error}</p>}{item.before.length ? <><h3>Detected before cleaning</h3><dl>{item.before.slice(0, 100).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>{item.before.length > 100 && <p>Showing 100 of {item.before.length} fields.</p>}</> : <p>No removable metadata fields were detected.</p>}{item.status === "clean" && <p className="metadata-clean-note">Verification complete: {item.after.length} non-operational metadata fields remain.</p>}{item.status === "clean" && item.after.length > 0 && <><h3>Remaining after cleaning</h3><dl>{item.after.slice(0, 100).map(([key, value]) => <div key={`after-${key}`}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></>}<div className="metadata-row-actions">{item.status === "ready" && <button className="secondary-button" onClick={() => cleanOne(item)}>Clean this file</button>}{item.output && <button className="secondary-button" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)}>Download cleaned file</button>}</div></div>}</article>)}</div>
+      {items.filter((item) => item.output).length > 1 && <button className="workspace-run" onClick={downloadZip}>Download all cleaned files as ZIP <span>↓</span></button>}
       <p className="metadata-caveat">Verification is format-aware, but no automated remover can promise that every proprietary application-specific trace is gone. Review high-risk files with the receiving application before publication.</p>
     </section>}
   </div>;

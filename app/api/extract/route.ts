@@ -3,6 +3,10 @@ import { allowRequest, clientKey } from "../../../lib/rate-limit";
 
 export const runtime = "edge";
 
+function safeDecode(value: string) {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
+
 const AUDIO_EXTENSIONS = ["mp3", "wav", "m4a", "aac", "ogg", "oga", "flac", "opus", "mpeg", "weba"];
 const AUDIO_PATTERN = new RegExp(`\\.(${AUDIO_EXTENSIONS.join("|")})(?:[?#][^\\s\"'<>]*)?$`, "i");
 const MAX_HTML_BYTES = 3_000_000;
@@ -50,7 +54,7 @@ function decodeHtml(value: string) {
 }
 
 function safeFilename(url: URL, index: number) {
-  let name = decodeURIComponent(url.pathname.split("/").pop() || "").replace(/[\\/:*?\"<>|]/g, "-");
+  let name = safeDecode(url.pathname.split("/").pop() || "").replace(/[\\/:*?\"<>|]/g, "-");
   if (!name || !AUDIO_PATTERN.test(name)) {
     const extension = url.pathname.match(AUDIO_PATTERN)?.[1]?.toLowerCase() || "mp3";
     name = `audio-${String(index + 1).padStart(3, "0")}.${extension}`;

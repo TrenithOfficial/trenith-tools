@@ -359,13 +359,25 @@ export async function joinVideoFiles(files: File[], progress: ProgressHandler) {
       };
       // An interval keeps painting (and the recording progressing) even when the
       // tab is backgrounded; requestAnimationFrame would pause and stall the join.
-      const painter = window.setInterval(() => { try { paintFrame(); } catch { /* skip frame */ } }, 33);
+      // It also advances the bar with real playback time so long clips do not
+      // look frozen for minutes.
+      const painter = window.setInterval(() => {
+        try {
+          paintFrame();
+          const clipFraction = video.duration ? Math.min(1, (video.currentTime || 0) / video.duration) : 0;
+          progress(Math.max(1, Math.round(((index + clipFraction) / files.length) * 94)), `Recording clip ${index + 1} of ${files.length}`);
+        } catch { /* skip frame */ }
+      }, 100);
       try { await ended; paintFrame(); } finally { window.clearInterval(painter); }
     }
     recorder.stop();
     await stopped;
     progress(100, "Video join complete");
-    return { blob: new Blob(chunks, { type: mimeType || "video/webm" }), filename: `${safeStem(files[0].name)}-joined.webm` };
+    // Safari records H.264/MP4 when no WebM profile is available; label the file
+    // by what was actually recorded so strict importers do not reject it.
+    const actualType = recorder.mimeType || mimeType || "video/webm";
+    const extension = /mp4|mpeg|quicktime/i.test(actualType) ? "mp4" : "webm";
+    return { blob: new Blob(chunks, { type: actualType }), filename: `${safeStem(files[0].name)}-joined.${extension}` };
   } catch (error) {
     if (recorder.state !== "inactive") recorder.stop();
     throw error;
@@ -473,19 +485,57 @@ export async function transformPdf(
       });
     }
   });
-  progress(100, mode === "compress" ? "PDF optimized" : "PDF ready");
-  return new Blob([await document.save({ useObjectStreams: true, addDefaultPage: false }) as BlobPart], { type: "application/pdf" });
+  const saved = await document.save({ useObjectStreams: true, addDefaultPage: false });
+  if (mode === "compress") {
+    // Object-stream re-saving only shrinks documents that were not already
+    // stream-optimized. Report the real delta, and never hand back a larger
+    // file dressed up as "optimized".
+    if (saved.byteLength >= file.size) {
+      progress(100, "Already optimized — original kept (no smaller structure possible in-browser)");
+      return new Blob([await file.arrayBuffer()], { type: "application/pdf" });
+    }
+    progress(100, `Optimized · ${Math.round((1 - saved.byteLength / file.size) * 100)}% smaller`);
+  } else {
+    progress(100, "PDF ready");
+  }
+  return new Blob([saved as BlobPart], { type: "application/pdf" });
+}
+
+// pdf-lib can only embed PNG and JPEG. Anything else the picker accepts (WebP,
+// and browsers that decode HEIC/GIF) is re-encoded to PNG on a canvas first, so
+// a WebP no longer throws and fails the whole batch.
+async function imageToPngBytes(file: File): Promise<ArrayBuffer> {
+  const source = await decodeImageSource(file);
+  try {
+    const width = "naturalWidth" in source ? source.naturalWidth : source.width;
+    const height = "naturalHeight" in source ? source.naturalHeight : source.height;
+    if (!width || !height) throw new Error(`${file.name} could not be decoded for the PDF.`);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("Image processing is unavailable.");
+    context.drawImage(source, 0, 0);
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error(`${file.name} could not be converted for the PDF.`);
+    return blob.arrayBuffer();
+  } finally {
+    if ("close" in source) source.close();
+  }
 }
 
 export async function imagesToPdf(files: File[], progress: ProgressHandler) {
-  if (!files.length) throw new Error("Choose one or more JPG or PNG images.");
+  if (!files.length) throw new Error("Choose one or more JPG, PNG or WebP images.");
   const { PDFDocument } = await import("pdf-lib");
   const document = await PDFDocument.create();
   for (let index = 0; index < files.length; index += 1) {
     const file = files[index];
     progress(Math.round((index / files.length) * 90), `Adding ${file.name}`);
-    const bytes = await file.arrayBuffer();
-    const image = file.type.includes("png") ? await document.embedPng(bytes) : await document.embedJpg(bytes);
+    const isPng = file.type.includes("png") || /\.png$/i.test(file.name);
+    const isJpeg = file.type.includes("jpeg") || file.type.includes("jpg") || /\.jpe?g$/i.test(file.name);
+    const image = isPng ? await document.embedPng(await file.arrayBuffer())
+      : isJpeg ? await document.embedJpg(await file.arrayBuffer())
+      : await document.embedPng(await imageToPngBytes(file));
     const portrait = image.height >= image.width;
     const page = document.addPage(portrait ? [595.28, 841.89] : [841.89, 595.28]);
     const margin = 28;
@@ -516,6 +566,7 @@ async function decodeImageSource(file: File): Promise<ImageBitmap | HTMLImageEle
 }
 
 export async function processImage(file: File, width: number, quality: number, format: "image/jpeg" | "image/png" | "image/webp") {
+  if (!Number.isFinite(width) || width < 1) throw new Error("Enter a maximum width of at least 1 pixel.");
   const source = await decodeImageSource(file);
   try {
     const sourceWidth = "naturalWidth" in source ? source.naturalWidth : source.width;

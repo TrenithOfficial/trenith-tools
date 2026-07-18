@@ -221,26 +221,48 @@ function MusicUtility({ slug }: { slug: string }) {
   const timer = useRef<number | null>(null);
   const audio = useRef<AudioContext | null>(null);
   const beatIndex = useRef(0);
+  const nextNoteTime = useRef(0);
+  const bpmRef = useRef(bpm);
+  const beatsRef = useRef(beats);
+  // Keep the live tempo/beats in refs the running scheduler reads, updated in an
+  // effect (not during render) so dragging the slider changes speed without
+  // restarting the click loop and without the react-hooks/refs violation.
+  useEffect(() => { bpmRef.current = bpm; beatsRef.current = beats; });
 
   useEffect(() => () => { audio.current?.close(); }, []);
   useEffect(() => {
     if (!running) return;
-    const playClick = () => {
-      const context = audio.current || new AudioContext();
-      audio.current = context;
+    const context = audio.current || new AudioContext();
+    audio.current = context;
+    void context.resume();
+    // Web-Audio look-ahead scheduler: schedule every beat that falls inside the
+    // next 120ms against the audio clock, so the tempo is exact and background-tab
+    // timer throttling can never slow the click. bpm/beats are read from refs, so
+    // dragging the tempo slider changes speed without restarting the loop or
+    // firing a burst of clicks.
+    const scheduleClick = (time: number) => {
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      oscillator.frequency.value = beatIndex.current % beats === 0 ? 1150 : 820;
-      gain.gain.setValueAtTime(.14, context.currentTime);
-      gain.gain.exponentialRampToValueAtTime(.001, context.currentTime + .045);
+      oscillator.frequency.value = beatIndex.current % Math.max(1, beatsRef.current) === 0 ? 1150 : 820;
+      gain.gain.setValueAtTime(.14, time);
+      gain.gain.exponentialRampToValueAtTime(.001, time + .045);
       oscillator.connect(gain).connect(context.destination);
-      oscillator.start(); oscillator.stop(context.currentTime + .05);
+      oscillator.start(time); oscillator.stop(time + .05);
       beatIndex.current += 1;
     };
-    playClick();
-    timer.current = window.setInterval(playClick, 60_000 / Math.max(30, bpm));
+    beatIndex.current = 0;
+    nextNoteTime.current = context.currentTime + .06;
+    const tick = () => {
+      const secondsPerBeat = 60 / Math.max(30, bpmRef.current);
+      while (nextNoteTime.current < context.currentTime + .12) {
+        scheduleClick(nextNoteTime.current);
+        nextNoteTime.current += secondsPerBeat;
+      }
+    };
+    tick();
+    timer.current = window.setInterval(tick, 25);
     return () => { if (timer.current) window.clearInterval(timer.current); timer.current = null; };
-  }, [running, bpm, beats]);
+  }, [running]);
   const tapBpm = taps.length > 1 ? Math.round(60_000 / ((taps[taps.length - 1] - taps[Math.max(0, taps.length - 6)]) / Math.min(5, taps.length - 1))) : 0;
   const noteIndexes: Record<string, number> = { C: -9, "C#": -8, D: -7, "D#": -6, E: -5, F: -4, "F#": -3, G: -2, "G#": -1, A: 0, "A#": 1, B: 2 };
   const frequency = a4 * 2 ** ((noteIndexes[note] + (octave - 4) * 12) / 12);
@@ -256,7 +278,7 @@ function MusicUtility({ slug }: { slug: string }) {
   };
 
   if (slug === "tap-bpm") return <div className="calculator-workspace"><span className="panel-label">TAP TEMPO</span><div className="tempo-readout"><strong>{tapBpm || "—"}</strong><span>BPM</span></div><button className="tap-button" onClick={() => setTaps([...taps.slice(-5), Date.now()])}>TAP THE BEAT</button><button className="reset-button" onClick={() => setTaps([])}>Reset taps</button><p>Uses the latest five intervals for a responsive tempo estimate.</p></div>;
-  if (slug === "bpm-delay-calculator") return <div className="calculator-workspace"><span className="panel-label">TEMPO INPUT</span><label className="large-input">BPM<input type="number" min="20" max="400" value={bpm} onChange={(event) => setBpm(Number(event.target.value))} /></label><div className="timing-grid">{timings.map((item) => <article key={item.label}><span>{item.label}</span><strong>{Math.round((60_000 / bpm) * item.factor)} ms</strong><small>Dotted {Math.round((60_000 / bpm) * item.factor * 1.5)} · Triplet {Math.round((60_000 / bpm) * item.factor * 2 / 3)}</small></article>)}</div></div>;
+  if (slug === "bpm-delay-calculator") return <div className="calculator-workspace"><span className="panel-label">TEMPO INPUT</span><label className="large-input">BPM<input type="number" min="20" max="400" value={bpm} onChange={(event) => setBpm(Number(event.target.value))} /></label><div className="timing-grid">{timings.map((item) => { const base = bpm >= 1 ? 60_000 / bpm : 0; const ms = (value: number) => bpm >= 1 ? `${Math.round(value)} ms` : "—"; return <article key={item.label}><span>{item.label}</span><strong>{ms(base * item.factor)}</strong><small>Dotted {ms(base * item.factor * 1.5)} · Triplet {ms(base * item.factor * 2 / 3)}</small></article>; })}</div></div>;
   if (slug === "note-frequency") return <div className="calculator-workspace"><span className="panel-label">EQUAL TEMPERAMENT</span><div className="frequency-controls"><label>Note<select value={note} onChange={(event) => setNote(event.target.value)}>{Object.keys(noteIndexes).map((item) => <option key={item}>{item}</option>)}</select></label><label>Octave<input type="number" min="0" max="9" value={octave} onChange={(event) => setOctave(Number(event.target.value))} /></label><label>A4 reference<input type="number" min="400" max="480" value={a4} onChange={(event) => setA4(Number(event.target.value))} /></label></div><div className="frequency-result"><strong>{frequency.toFixed(3)}</strong><span>Hz</span><p>{note}{octave} with A4 tuned to {a4} Hz</p></div></div>;
   return <div className="calculator-workspace"><span className="panel-label">BROWSER METRONOME</span><div className={running ? "metronome-display running" : "metronome-display"}><i /><strong>{bpm}</strong><span>BPM</span></div><div className="frequency-controls"><label>Tempo<input type="range" min="30" max="240" value={bpm} onChange={(event) => setBpm(Number(event.target.value))} /></label><label>Beats per bar<select value={beats} onChange={(event) => setBeats(Number(event.target.value))}>{[2,3,4,5,6,7].map((item) => <option key={item}>{item}</option>)}</select></label></div><button className="workspace-run metronome-button" onClick={toggleMetronome}>{running ? "Stop metronome" : "Start metronome"}</button></div>;
 }

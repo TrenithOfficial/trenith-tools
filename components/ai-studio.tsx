@@ -153,6 +153,7 @@ export function AiStudio() {
         return;
       }
       if (!connection) throw new Error("Connect and select a provider before running this workflow.");
+      if (connection.provider === "elevenlabs" && workflow !== "text-to-speech") throw new Error("ElevenLabs only powers Text to Speech. Choose an OpenAI, Anthropic, Gemini or OpenRouter connection for this workflow.");
       const briefMode = mediaJobWorkflows.has(workflow) && connection.provider !== "compatible" && !visionRun;
       let response: Response;
       if (connection.provider === "compatible") {
@@ -165,7 +166,11 @@ export function AiStudio() {
         });
       } else {
         const fileContext = briefMode && sourceFile ? `\n\nAttached recording for reference: ${sourceFile.name} (${(sourceFile.size / 1024 / 1024).toFixed(2)} MB). Base the plan on this file's described content.` : "";
-        const payload: Record<string, unknown> = { action: "generate", provider: connection.provider, apiKey: connection.apiKey, model: connection.model, voiceId: connection.voiceId, prompt: prompt + fileContext };
+        // ElevenLabs speaks exactly what it receives, so strip the instruction
+        // prefix the browser-voice path also removes; otherwise the MP3 opens
+        // with "Read the following text naturally:".
+        const spoken = workflow === "text-to-speech" && connection.provider === "elevenlabs" ? (prompt.replace(/^Read the following text naturally:\s*/i, "").trim() || prompt) : prompt;
+        const payload: Record<string, unknown> = { action: "generate", provider: connection.provider, apiKey: connection.apiKey, model: connection.model, voiceId: connection.voiceId, prompt: spoken + fileContext };
         if (visionRun && sourceFile) {
           payload.imageDataUrl = await fileToDataUrl(sourceFile);
         }
@@ -180,10 +185,31 @@ export function AiStudio() {
         const detail = mime.includes("json") ? (await response.json() as { error?: string }).error : await response.text();
         throw new Error(detail || `The provider returned HTTP ${response.status}.`);
       }
-      if (mime.includes("application/json") || mime.includes("text/")) {
-        const data = mime.includes("json") ? await response.json() as { text?: string; choices?: Array<{ message?: { content?: string } }>; output?: string } : { text: await response.text() };
+      const label = briefMode ? "Structured plan from your text model. Connect a compatible media endpoint to run the finished job." : undefined;
+      if (mime.includes("application/json")) {
+        // Custom "compatible" endpoints answer with a single JSON body.
+        const data = await response.json() as { text?: string; choices?: Array<{ message?: { content?: string } }>; output?: string };
         const text = data.text || data.output || data.choices?.[0]?.message?.content || JSON.stringify(data, null, 2);
-        setResult({ kind: "text", text, label: briefMode ? "Structured plan from your text model. Connect a compatible media endpoint to run the finished job." : undefined });
+        setResult({ kind: "text", text, label });
+      } else if (mime.startsWith("text/") || mime.includes("event-stream")) {
+        // The allowlisted providers stream text so long generations never hit
+        // the edge timeout; render each delta as it arrives.
+        const reader = response.body?.getReader();
+        if (!reader) {
+          setResult({ kind: "text", text: (await response.text()) || "The provider returned no text.", label });
+        } else {
+          const decoder = new TextDecoder();
+          let text = "";
+          setResult({ kind: "text", text: "", label });
+          for (;;) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            text += decoder.decode(value, { stream: true });
+            setResult({ kind: "text", text, label });
+          }
+          text += decoder.decode();
+          setResult({ kind: "text", text: text || "The provider returned no text.", label });
+        }
       } else {
         const blob = await response.blob();
         setResult({ kind: "file", url: URL.createObjectURL(blob), name: fileNameFromResponse(response, mime), mime });

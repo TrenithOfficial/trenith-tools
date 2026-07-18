@@ -18,14 +18,23 @@ function LengthCheck({ label, value, limit, unit }: { label: string; value: numb
   return <div className={over ? "length-check over" : "length-check"}><span>{label}</span><strong>{value.toLocaleString()} / {limit.toLocaleString()} {unit}</strong><b>{over ? "Too long — likely truncated" : "Fits"}</b></div>;
 }
 
+function useCopyButton() {
+  const [copied, setCopied] = useState(false);
+  const copy = async (text: string) => {
+    try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { setCopied(false); }
+  };
+  return { copied, copy };
+}
+
 function SerpPreview() {
   const [title, setTitle] = useState("Free Private File Tools — Convert, Clean and Merge in Your Browser");
   const [url, setUrl] = useState("https://example.com/tools");
   const [description, setDescription] = useState("Convert audio, remove hidden metadata, merge PDFs and compress images without uploading files. Free, private and fast on any device.");
+  const { copied, copy } = useCopyButton();
   const display = useMemo(() => {
     try {
       const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
-      const path = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\//g, " › ").replace(/^ › /, " › ");
+      const path = parsed.pathname.split("/").filter(Boolean).map((segment) => ` › ${segment}`).join("");
       return `${parsed.hostname}${path}`;
     } catch { return url; }
   }, [url]);
@@ -44,6 +53,7 @@ function SerpPreview() {
         <LengthCheck label="Description characters" value={description.length} limit={160} unit="chars" />
         <LengthCheck label="Description width (approx.)" value={descriptionPixels} limit={990} unit="px" />
       </div>
+      <button type="button" className="secondary-button seo-copy" onClick={() => copy(`${title}\n${description}`)}>{copied ? "Copied ✓" : "Copy title & description"}</button>
       <small className="seo-footnote">Pixel widths are estimates from average glyph metrics. Search engines rewrite snippets they consider unhelpful, so clarity beats exact length.</small>
     </section>
     <aside className="workspace-panel">
@@ -87,10 +97,11 @@ function topPhrases(words: string[], size: number, limit: number) {
 
 function KeywordDensity() {
   const [text, setText] = useState("");
+  const { copied, copy } = useCopyButton();
   const analysis = useMemo(() => {
     const clean = text.trim();
     if (!clean) return null;
-    const words = clean.toLowerCase().replace(/[^\p{L}\p{N}'\s-]/gu, " ").split(/\s+/).filter(Boolean);
+    const words = clean.toLowerCase().replace(/[^\p{L}\p{N}'\s-]/gu, " ").split(/\s+/).map((word) => word.replace(/^['-]+|['-]+$/g, "")).filter((word) => /[\p{L}\p{N}]/u.test(word));
     const sentences = clean.split(/[.!?]+\s/).filter((sentence) => sentence.trim().length > 1);
     const syllables = words.reduce((total, word) => total + countSyllables(word), 0);
     const flesch = sentences.length && words.length ? Math.round(206.835 - 1.015 * (words.length / sentences.length) - 84.6 * (syllables / words.length)) : 0;
@@ -119,6 +130,7 @@ function KeywordDensity() {
       <span className="panel-label">ANALYSIS</span>
       {!analysis && <div className="output-placeholder"><span>%</span><h2>Metrics appear here</h2><p>Word counts, readability, keyword densities and detected questions update as you paste or type.</p></div>}
       {analysis && <>
+        <button type="button" className="secondary-button seo-copy" onClick={() => copy([`Words: ${analysis.words} \u00b7 Sentences: ${analysis.sentences} \u00b7 Reading ease: ${analysis.flesch}/100`, "", "Top keywords:", ...analysis.singles.map(([phrase, count]) => `${phrase} \u2014 ${count}\u00d7 (${(count / Math.max(1, analysis.words) * 100).toFixed(1)}%)`), ...(analysis.questions.length ? ["", "Questions answered:", ...analysis.questions] : [])].join("\n"))}>{copied ? "Copied \u2713" : "Copy report"}</button>
         <div className="density-stats">
           <article><span>Words</span><strong>{analysis.words.toLocaleString()}</strong></article>
           <article><span>Sentences</span><strong>{analysis.sentences.toLocaleString()}</strong></article>

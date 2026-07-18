@@ -3,6 +3,10 @@ import { allowRequest, clientKey } from "../../../lib/rate-limit";
 
 export const runtime = "edge";
 
+function safeDecode(value: string) {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
+
 const MAX_PROXY_BYTES = 2 * 1024 * 1024 * 1024;
 
 const AUDIO_PATTERN = /\.(mp3|wav|m4a|aac|ogg|oga|flac|opus|mpeg|weba)(?:[?#].*)?$/i;
@@ -47,7 +51,7 @@ export async function GET(request: NextRequest) {
     if (isPrivateHost(finalUrl.hostname)) throw new Error("The audio source redirected to a private address.");
     // Strip control characters as well as separator characters so a crafted
     // path can never inject additional response-header content.
-    const filename = decodeURIComponent(finalUrl.pathname.split("/").pop() || "audio.mp3").replace(/[\\/:*?\"<>|]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "");
+    const filename = safeDecode(finalUrl.pathname.split("/").pop() || "audio.mp3").replace(/[\\/:*?\"<>|]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "");
 
     return new NextResponse(response.body, {
       headers: {

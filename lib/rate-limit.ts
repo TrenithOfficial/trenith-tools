@@ -18,5 +18,10 @@ export function allowRequest(key: string, limit: number, windowMs: number) {
 }
 
 export function clientKey(headers: Headers) {
-  return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || headers.get("x-real-ip") || "unknown";
+  // Prefer Vercel's own client-IP header (platform-set, not client-spoofable),
+  // then x-real-ip, then the first forwarded hop.
+  return headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()
+    || headers.get("x-real-ip")
+    || headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || "unknown";
 }

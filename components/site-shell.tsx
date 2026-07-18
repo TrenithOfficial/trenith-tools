@@ -90,7 +90,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <div className="footer-column"><strong>Platform</strong><Link href="/status">Tool status</Link><Link href="/changelog">Changelog</Link><Link href="/studio">AI Studio</Link><Link href="/connections">BYOK Connections</Link><Link href="/guides">Guides</Link><Link href="/about">About Trenith</Link><a href="https://www.trenith.com/contact?utm_source=trenith_tools&utm_medium=product&utm_campaign=footer" target="_blank" rel="noreferrer">Build with Trenith ↗</a></div>
           <div className="footer-column"><strong>Trust</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/cookies">Cookies</Link><button className="footer-settings" onClick={openPrivacySettings}>Privacy settings</button><Link href="/privacy-choices">Privacy choices</Link><Link href="/security">Security</Link><Link href="/sub-processors">Subprocessors</Link><Link href="/open-source">Open-source notices</Link><Link href="/copyright">Copyright</Link><Link href="/accessibility">Accessibility</Link></div>
         </div>
-        <div className="footer-bottom"><span>© 2026 Trenith Technologies Pvt Ltd</span><span>Co-authored by Sai Phanindra Manikanta Yalamanchili</span></div>
+        <div className="footer-bottom"><span>© 2026 Trenith Technologies Pvt Ltd</span><span>Private, device-first tools · Hyderabad, India</span></div>
       </footer>
     </>
   );

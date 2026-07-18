@@ -20,7 +20,7 @@ export function ToolsBrowser() {
   return (
     <>
       <div className="tool-browser-controls">
-        <label className="tool-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by tool, job or format" aria-label="Search tools" /><kbd>{visible.length}</kbd></label>
+        <label className="tool-search"><span>⌕</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search by tool, job or format" aria-label="Search tools" /><span className="tool-search-count" aria-label={`${visible.length} tools shown`}>{visible.length}</span></label>
         <div className="tool-filters" aria-label="Filter tools by category">{categories.map((item) => <button key={item} className={category === item ? "active" : ""} onClick={() => setCategory(item)}>{item}</button>)}</div>
       </div>
       <div className="full-tool-grid">{visible.map((tool) => <ToolCard key={tool.slug} tool={tool} />)}</div>

@@ -3,7 +3,7 @@ import { JsonLd } from "../components/json-ld";
 import { OrbitVisual } from "../components/orbit-visual";
 import { ToolCard } from "../components/tool-card";
 import { quickTools, tools } from "../lib/catalog";
-import { COMPANY_ADDRESS, COMPANY_CIN, COMPANY_NAME, siteLanguage, siteUrl, trenithContactUrl } from "../lib/site";
+import { COMPANY_ADDRESS, COMPANY_CIN, siteUrl, trenithContactUrl } from "../lib/site";
 
 const faqs = [
   ["What does processed on your device mean?", "Audio, video, PDF and image source files are handled by browser APIs on your computer or phone. Trenith does not receive or store those input files for these tools."],
@@ -27,27 +27,6 @@ export default function Home() {
   const structuredData = [
     {
       "@context": "https://schema.org",
-      "@type": "Organization",
-      "@id": `${siteUrl("/")}#organization`,
-      name: COMPANY_NAME,
-      legalName: COMPANY_NAME,
-      taxID: COMPANY_CIN,
-      url: "https://www.trenith.com",
-      logo: siteUrl("/trenith-mark.png"),
-      address: { "@type": "PostalAddress", streetAddress: "Plot No. 272, Pragatinagar", addressLocality: "Hyderabad", addressRegion: "Telangana", postalCode: "500090", addressCountry: "IN" },
-      areaServed: ["India", "United States", "European Union", "Worldwide"],
-    },
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "@id": `${siteUrl("/")}#website`,
-      name: "Trenith Tools",
-      url: siteUrl("/"),
-      publisher: { "@id": `${siteUrl("/")}#organization` },
-      inLanguage: siteLanguage,
-    },
-    {
-      "@context": "https://schema.org",
       "@type": "SoftwareApplication",
       name: "Trenith Tools",
       applicationCategory: "UtilitiesApplication",
@@ -56,7 +35,7 @@ export default function Home() {
       description: "Free browser-based audio, video, PDF, image and BYOK AI tools.",
       offers: { "@type": "Offer", price: "0", priceCurrency: "USD", availability: "https://schema.org/InStock" },
       featureList: quickTools.map((tool) => tool.name),
-      author: { "@id": `${siteUrl("/")}#organization` },
+      author: { "@id": "https://trenith.com/#organization" },
     },
     {
       "@context": "https://schema.org",
@@ -129,7 +108,7 @@ export default function Home() {
 
       <section className="faq-section page-frame">
         <div><span className="section-kicker">DIRECT ANSWERS</span><h2>Frequently asked questions</h2><p>Plain-language answers for people, search engines and answer engines.</p></div>
-        <div className="faq-list">{faqs.map(([question, answer], index) => <details key={question} open={index === 0}><summary>{question}<span>＋</span></summary><p>{answer}</p></details>)}</div>
+        <div className="faq-list">{faqs.map(([question, answer], index) => <details key={question} open={index === 0}><summary>{question}</summary><p>{answer}</p></details>)}</div>
       </section>
     </>
   );
