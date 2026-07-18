@@ -142,7 +142,7 @@ function KeywordDensity() {
         {analysis.pairs.length > 0 && <><h3>Repeated two-word phrases</h3><div className="density-list">{analysis.pairs.map(([phrase, count]) => <div key={phrase}><span>{phrase}</span><b>{count}×</b></div>)}</div></>}
         {analysis.triples.length > 0 && <><h3>Repeated three-word phrases</h3><div className="density-list">{analysis.triples.map(([phrase, count]) => <div key={phrase}><span>{phrase}</span><b>{count}×</b></div>)}</div></>}
         <h3>Questions this copy answers</h3>
-        {analysis.questions.length ? <ul className="density-questions">{analysis.questions.map((question) => <li key={question}>{question}</li>)}</ul> : <p className="seo-footnote">No direct questions found. Answer-engine visibility improves when copy asks and answers the questions people search for.</p>}
+        {analysis.questions.length ? <ul className="density-questions">{analysis.questions.map((question, index) => <li key={`${question}-${index}`}>{question}</li>)}</ul> : <p className="seo-footnote">No direct questions found. Answer-engine visibility improves when copy asks and answers the questions people search for.</p>}
       </>}
     </aside>
   </div>;

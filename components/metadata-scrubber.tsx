@@ -111,7 +111,23 @@ export function MetadataScrubber() {
     if (!cleaned.length) return;
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
-    cleaned.forEach((item) => zip.file(item.file.webkitRelativePath || item.file.name, item.output!));
+    // Two individually-picked files can share a basename (report.pdf from two
+    // folders). JSZip overwrites same-name entries, so de-duplicate here — a
+    // silent drop from a privacy tool could leave a user with an uncleaned file.
+    const usedNames = new Set<string>();
+    cleaned.forEach((item) => {
+      const base = item.file.webkitRelativePath || item.file.name;
+      let name = base;
+      if (usedNames.has(name)) {
+        const dot = base.lastIndexOf(".");
+        const stem = dot > 0 ? base.slice(0, dot) : base;
+        const ext = dot > 0 ? base.slice(dot) : "";
+        let counter = 2;
+        do { name = `${stem} (${counter})${ext}`; counter += 1; } while (usedNames.has(name));
+      }
+      usedNames.add(name);
+      zip.file(name, item.output!);
+    });
     downloadBlob(await zip.generateAsync({ type: "blob", compression: "DEFLATE" }), "trenith-metadata-cleaned.zip");
   }
 

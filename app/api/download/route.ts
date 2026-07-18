@@ -16,9 +16,21 @@ function isPrivateHost(hostname: string) {
   return host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "::" || host === "::1" || host === "0.0.0.0" || host.startsWith("::ffff:") || /^f[cd][0-9a-f]{2}:/i.test(host) || /^fe[89ab][0-9a-f]:/i.test(host) || /^127\.|^10\.|^192\.168\.|^169\.254\.|^100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) || (() => { const match = host.match(/^172\.(\d+)\./); return Boolean(match && Number(match[1]) >= 16 && Number(match[1]) <= 31); })();
 }
 
-function validateAudioUrl(input: string) {
+// SSRF/network safety only — no audio-extension gate. Applied to every URL we
+// fetch, including redirect targets.
+function validateNetworkTarget(input: string) {
   const url = new URL(input);
-  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || isPrivateHost(url.hostname) || (url.port && !["80", "443"].includes(url.port)) || !AUDIO_PATTERN.test(url.pathname + url.search)) throw new Error("Unsupported audio URL.");
+  if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || isPrivateHost(url.hostname) || (url.port && !["80", "443"].includes(url.port))) throw new Error("Unsupported audio URL.");
+  return url;
+}
+
+// The user-supplied URL must still look like an audio file; redirect targets do
+// not, because CDNs commonly 302 an .mp3 link to a presigned, extensionless URL
+// (S3/CloudFront, podcast trackers). Re-imposing the extension gate on those
+// hops made the scanner list files that this proxy then refused to download.
+function validateAudioUrl(input: string) {
+  const url = validateNetworkTarget(input);
+  if (!AUDIO_PATTERN.test(url.pathname + url.search)) throw new Error("Unsupported audio URL.");
   return url;
 }
 
@@ -29,7 +41,7 @@ async function fetchPublicAudio(initial: URL) {
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     const location = response.headers.get("location");
     if (!location) throw new Error("The audio source returned an invalid redirect.");
-    current = validateAudioUrl(new URL(location, current).href);
+    current = validateNetworkTarget(new URL(location, current).href);
   }
   throw new Error("The audio source returned too many redirects.");
 }

@@ -1,5 +1,5 @@
 export type ToolKind = "device" | "byok" | "web";
-export type ToolCategory = "Audio" | "Video" | "PDF" | "Image" | "Privacy" | "AI Studio" | "Music" | "SEO";
+export type ToolCategory = "Audio" | "Video" | "PDF" | "Image" | "Privacy" | "AI Studio" | "Music" | "SEO" | "Developer";
 
 export type ToolDefinition = {
   slug: string;
@@ -235,12 +235,33 @@ export const tools: ToolDefinition[] = [
     description: "Create a people-first search and answer-engine content brief from verified business facts without keyword stuffing.",
     steps: ["Connect a language model", "Add audience, region, evidence and search intent", "Generate a structured, fact-checked brief"],
   },
+  {
+    slug: "password-generator", name: "Password Generator", shortName: "Password Generator", category: "Developer", kind: "device", icon: "🔑", accent: "blue",
+    description: "Create strong, unique passwords with adjustable length and character sets using your browser's cryptographic random source — never sent anywhere.",
+    steps: ["Choose length and character types", "Generate a crypto-strong password", "Copy it — nothing is stored or uploaded"],
+  },
+  {
+    slug: "hash-generator", name: "Hash & Checksum Generator", shortName: "Hash Generator", category: "Developer", kind: "device", icon: "#", accent: "violet",
+    formats: ["SHA-256", "SHA-384", "SHA-512", "SHA-1"],
+    description: "Compute SHA-256, SHA-384, SHA-512 or SHA-1 hashes of text or a file entirely in your browser to verify integrity and checksums.",
+    steps: ["Paste text or choose a file", "Select a hash algorithm", "Compute and copy the hex digest"],
+  },
+  {
+    slug: "uuid-generator", name: "UUID Generator", shortName: "UUID Generator", category: "Developer", kind: "device", icon: "⌗", accent: "cyan",
+    description: "Generate one or many random version-4 UUIDs on your device and copy or download the whole set.",
+    steps: ["Choose how many UUIDs you need", "Generate version-4 identifiers", "Copy all or download as a text file"],
+  },
+  {
+    slug: "base64-encoder", name: "Base64 Encoder & Decoder", shortName: "Base64", category: "Developer", kind: "device", icon: "⇄", accent: "amber",
+    description: "Encode text to Base64 or decode Base64 back to text with full UTF-8 support, processed entirely in your browser.",
+    steps: ["Choose encode or decode", "Paste your text or Base64", "Copy the converted result"],
+  },
 ];
 
 export const toolBySlug = Object.fromEntries(tools.map((tool) => [tool.slug, tool])) as Record<string, ToolDefinition>;
 export const quickToolSlugs = ["metadata-remover", "audio-downloader", "audio-converter", "audio-joiner", "merge-pdf", "image-converter"];
 export const quickTools = quickToolSlugs.map((slug) => toolBySlug[slug]);
-export const categories: Array<"All" | ToolCategory> = ["All", "Privacy", "Audio", "Video", "PDF", "Image", "Music", "SEO", "AI Studio"];
+export const categories: Array<"All" | ToolCategory> = ["All", "Privacy", "Audio", "Video", "PDF", "Image", "Music", "SEO", "Developer", "AI Studio"];
 
 export function kindLabel(kind: ToolKind) {
   if (kind === "device") return "Processed on your device";

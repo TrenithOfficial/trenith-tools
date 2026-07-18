@@ -56,13 +56,20 @@ test("audio conversion profiles expose six concrete encoders", () => {
   assert.equal(audioProfiles.flac.lossless, true);
 });
 
-test("catalog publishes 44 unique tools including the free SEO utilities", async () => {
+test("catalog publishes 48 unique tools including the free SEO and Developer utilities", async () => {
   const { tools, categories } = await import("../lib/catalog.ts");
-  assert.equal(tools.length, 44);
-  assert.equal(new Set(tools.map((tool) => tool.slug)).size, 44);
+  assert.equal(tools.length, 48);
+  assert.equal(new Set(tools.map((tool) => tool.slug)).size, 48);
   const serp = tools.find((tool) => tool.slug === "serp-snippet-preview");
   const density = tools.find((tool) => tool.slug === "keyword-density-analyzer");
   assert.equal(serp?.kind, "device");
   assert.equal(density?.kind, "device");
   assert.ok(categories.includes("SEO"));
+  // The Developer utilities are on-device tools with no upload or key.
+  for (const slug of ["password-generator", "hash-generator", "uuid-generator", "base64-encoder"]) {
+    const tool = tools.find((item) => item.slug === slug);
+    assert.equal(tool?.category, "Developer", `${slug} is a Developer tool`);
+    assert.equal(tool?.kind, "device", `${slug} runs on-device`);
+  }
+  assert.ok(categories.includes("Developer"));
 });

@@ -69,7 +69,13 @@ export function audioBufferToWav(buffer: AudioBuffer) {
   return new Blob([arrayBuffer], { type: "audio/wav" });
 }
 
+// A file plus its fully-decoded float32 PCM must fit in memory; multi-GB inputs
+// otherwise OOM-crash the tab with no message. Fail fast with an honest limit,
+// mirroring the converter engine's capacity guard.
+const MAX_DECODE_BYTES = 1_500_000_000;
+
 async function decodeAudioFile(context: AudioContext, file: File, compatibilityProgress?: (message: string) => void) {
+  if (file.size > MAX_DECODE_BYTES) throw new Error(`${file.name} is ${(file.size / 1024 / 1024 / 1024).toFixed(1)} GB — too large to decode in a browser tab (about 1.5 GB max). Trim or split it first.`);
   try {
     return await context.decodeAudioData(await file.arrayBuffer());
   } catch {
@@ -357,18 +363,32 @@ export async function joinVideoFiles(files: File[], progress: ProgressHandler) {
         const height = video.videoHeight * ratio;
         paint.drawImage(video, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
       };
-      // An interval keeps painting (and the recording progressing) even when the
-      // tab is backgrounded; requestAnimationFrame would pause and stall the join.
-      // It also advances the bar with real playback time so long clips do not
-      // look frozen for minutes.
+      // requestVideoFrameCallback paints on each decoded frame, so smooth 30/60fps
+      // sources are captured at their real cadence instead of the ~10fps a plain
+      // 100ms interval produced. A slower interval still runs alongside it to
+      // advance the progress bar and to keep painting if the browser throttles the
+      // frame callback in a backgrounded tab.
+      const rvfcVideo = video as HTMLVideoElement & {
+        requestVideoFrameCallback?: (cb: () => void) => number;
+        cancelVideoFrameCallback?: (handle: number) => void;
+      };
+      const hasRvfc = typeof rvfcVideo.requestVideoFrameCallback === "function";
+      let rvfcHandle = 0;
+      if (hasRvfc) {
+        const loop = () => { try { paintFrame(); } catch { /* skip frame */ } rvfcHandle = rvfcVideo.requestVideoFrameCallback!(loop); };
+        rvfcHandle = rvfcVideo.requestVideoFrameCallback!(loop);
+      }
       const painter = window.setInterval(() => {
         try {
           paintFrame();
           const clipFraction = video.duration ? Math.min(1, (video.currentTime || 0) / video.duration) : 0;
           progress(Math.max(1, Math.round(((index + clipFraction) / files.length) * 94)), `Recording clip ${index + 1} of ${files.length}`);
         } catch { /* skip frame */ }
-      }, 100);
-      try { await ended; paintFrame(); } finally { window.clearInterval(painter); }
+      }, hasRvfc ? 250 : 40);
+      try { await ended; paintFrame(); } finally {
+        window.clearInterval(painter);
+        if (hasRvfc && rvfcHandle) rvfcVideo.cancelVideoFrameCallback?.(rvfcHandle);
+      }
     }
     recorder.stop();
     await stopped;
@@ -409,13 +429,29 @@ export function parsePageSelection(value: string, totalPages: number) {
   return indexes;
 }
 
+// pdf-lib rejects any encrypted PDF (even ones that open with no password) and
+// its raw error tells the user to call a JavaScript API they cannot reach.
+// Load through this helper so every PDF tool fails with one clear, honest
+// message instead of the developer-facing string.
+async function loadPdf(bytes: ArrayBuffer) {
+  const { PDFDocument } = await import("pdf-lib");
+  try {
+    return await PDFDocument.load(bytes, { ignoreEncryption: false });
+  } catch (error) {
+    if (error instanceof Error && /encrypt/i.test(error.message)) {
+      throw new Error("This PDF is password-protected or encrypted, so it can't be processed in the browser. Remove its protection first (open it and re-save or print to PDF), then try again.");
+    }
+    throw error;
+  }
+}
+
 export async function mergePdfFiles(files: File[], progress: ProgressHandler) {
   if (files.length < 2) throw new Error("Choose at least two PDF files to merge.");
   const { PDFDocument } = await import("pdf-lib");
   const output = await PDFDocument.create();
   for (let index = 0; index < files.length; index += 1) {
     progress(Math.round((index / files.length) * 90), `Adding ${files[index].name}`);
-    const source = await PDFDocument.load(await files[index].arrayBuffer(), { ignoreEncryption: false });
+    const source = await loadPdf(await files[index].arrayBuffer());
     const pages = await output.copyPages(source, source.getPageIndices());
     pages.forEach((page) => output.addPage(page));
   }
@@ -425,7 +461,7 @@ export async function mergePdfFiles(files: File[], progress: ProgressHandler) {
 
 export async function extractPdfPages(file: File, selection: string, progress: ProgressHandler) {
   const { PDFDocument } = await import("pdf-lib");
-  const source = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: false });
+  const source = await loadPdf(await file.arrayBuffer());
   const indexes = parsePageSelection(selection, source.getPageCount());
   if (!indexes.length) throw new Error(`Enter pages between 1 and ${source.getPageCount()}, for example 1-3,5.`);
   progress(45, "Extracting selected pages");
@@ -438,7 +474,7 @@ export async function extractPdfPages(file: File, selection: string, progress: P
 
 export async function splitPdfToZip(file: File, progress: ProgressHandler) {
   const [{ PDFDocument }, { default: JSZip }] = await Promise.all([import("pdf-lib"), import("jszip")]);
-  const source = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: false });
+  const source = await loadPdf(await file.arrayBuffer());
   const zip = new JSZip();
   for (let index = 0; index < source.getPageCount(); index += 1) {
     progress(Math.round((index / source.getPageCount()) * 80), `Creating page ${index + 1}`);
@@ -459,10 +495,22 @@ export async function transformPdf(
   value: string,
   progress: ProgressHandler,
 ) {
-  const { PDFDocument, StandardFonts, degrees, rgb } = await import("pdf-lib");
-  const document = await PDFDocument.load(await file.arrayBuffer(), { ignoreEncryption: false });
+  const { StandardFonts, degrees, rgb } = await import("pdf-lib");
+  const document = await loadPdf(await file.arrayBuffer());
   const pages = document.getPages();
   const font = mode === "number" || mode === "watermark" ? await document.embedFont(StandardFonts.HelveticaBold) : null;
+  const watermarkLabel = mode === "watermark" ? (value.trim() || "TRENITH") : "";
+  // The built-in Helvetica font uses WinAnsi encoding and throws on any code
+  // point it can't encode (Chinese, Cyrillic, Arabic, emoji…). Validate the
+  // user's watermark once, up front, so those users get a clear message instead
+  // of pdf-lib's raw "WinAnsi cannot encode" error mid-render.
+  if (mode === "watermark" && font) {
+    try {
+      font.widthOfTextAtSize(watermarkLabel, 24);
+    } catch {
+      throw new Error("This watermark text includes characters the built-in PDF font can't render (for example non-Latin scripts or emoji). Please use Latin letters, numbers and common symbols.");
+    }
+  }
   pages.forEach((page, index) => {
     progress(Math.round((index / Math.max(1, pages.length)) * 90), `Processing page ${index + 1}`);
     if (mode === "rotate") page.setRotation(degrees((page.getRotation().angle + 90) % 360));
@@ -472,7 +520,7 @@ export async function transformPdf(
       page.drawText(label, { x: (page.getWidth() - font.widthOfTextAtSize(label, size)) / 2, y: 18, size, font, color: rgb(.25, .28, .34) });
     }
     if (mode === "watermark" && font) {
-      const label = value.trim() || "TRENITH";
+      const label = watermarkLabel;
       const size = Math.max(22, Math.min(70, page.getWidth() / Math.max(5, label.length) * 1.5));
       page.drawText(label, {
         x: (page.getWidth() - font.widthOfTextAtSize(label, size)) / 2,
@@ -552,7 +600,9 @@ async function decodeImageSource(file: File): Promise<ImageBitmap | HTMLImageEle
   // createImageBitmap decodes off the rendering pipeline, so it keeps working
   // when the tab is backgrounded; HTMLImageElement.decode() can stall there.
   if ("createImageBitmap" in window) {
-    try { return await createImageBitmap(file); } catch { /* fall through to the element decoder */ }
+    // "from-image" applies the file's EXIF orientation so portrait phone photos
+    // export upright and match the HTMLImageElement fallback (which auto-rotates).
+    try { return await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { /* fall through to the element decoder */ }
   }
   const url = URL.createObjectURL(file);
   try {
@@ -585,7 +635,11 @@ export async function processImage(file: File, width: number, quality: number, f
     context.drawImage(source, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, format, quality));
     if (!blob) throw new Error("The browser could not export this image.");
-    const extension = format.split("/")[1].replace("jpeg", "jpg");
+    // Derive the extension from what the browser ACTUALLY encoded: canvas.toBlob
+    // falls back to PNG when an encoder (e.g. WebP on older Safari) is missing,
+    // so trusting the requested format would mislabel PNG bytes as .webp.
+    const actualType = blob.type || format;
+    const extension = (actualType.split("/")[1] || "png").replace("jpeg", "jpg");
     return { blob, filename: `${safeStem(file.name)}-${canvas.width}w.${extension}`, width: canvas.width, height: canvas.height };
   } finally {
     if ("close" in source) source.close();
