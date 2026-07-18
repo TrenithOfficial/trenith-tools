@@ -37,35 +37,41 @@ export async function POST(request: NextRequest) {
     };
 
     const webhook = process.env.FEEDBACK_WEBHOOK_URL;
+    const emailTo = process.env.FEEDBACK_EMAIL_TO || "info@trenith.com";
+
+    // A configured channel that fails (bad key, unverified sender, downtime)
+    // must never hard-error the visitor: it degrades to the mail-client
+    // fallback so feedback always has a way through.
     if (webhook && /^https:\/\//.test(webhook)) {
-      const delivered = await fetch(webhook, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: `Trenith Tools feedback (${category}) on ${page}:\n${message}\nReply: ${submission.email}`, ...submission }),
-      });
-      if (!delivered.ok) throw new Error("The feedback channel rejected the submission.");
-      return NextResponse.json({ ok: true });
+      try {
+        const delivered = await fetch(webhook, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: `Trenith Tools feedback (${category}) on ${page}:\n${message}\nReply: ${submission.email}`, ...submission }),
+        });
+        if (delivered.ok) return NextResponse.json({ ok: true });
+      } catch { /* fall through to the mail fallback */ }
     }
 
     const resendKey = process.env.RESEND_API_KEY;
-    const emailTo = process.env.FEEDBACK_EMAIL_TO || "info@trenith.com";
     if (resendKey) {
-      const delivered = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "content-type": "application/json", Authorization: `Bearer ${resendKey}` },
-        body: JSON.stringify({
-          from: process.env.FEEDBACK_EMAIL_FROM || "Trenith Tools <onboarding@resend.dev>",
-          to: [emailTo],
-          subject: `Tools feedback · ${category} · ${page}`,
-          text: `${message}\n\nPage: ${page}\nReply to: ${submission.email}\nUser agent: ${submission.userAgent}\nReceived: ${submission.receivedAt}`,
-        }),
-      });
-      if (!delivered.ok) throw new Error("The feedback mailer rejected the submission.");
-      return NextResponse.json({ ok: true });
+      try {
+        const delivered = await fetch("https://api.resend.com/emails", {
+          method: "POST",
+          headers: { "content-type": "application/json", Authorization: `Bearer ${resendKey}` },
+          body: JSON.stringify({
+            from: process.env.FEEDBACK_EMAIL_FROM || "Trenith Tools <onboarding@resend.dev>",
+            to: [emailTo],
+            subject: `Tools feedback · ${category} · ${page}`,
+            text: `${message}\n\nPage: ${page}\nReply to: ${submission.email}\nUser agent: ${submission.userAgent}\nReceived: ${submission.receivedAt}`,
+          }),
+        });
+        if (delivered.ok) return NextResponse.json({ ok: true });
+      } catch { /* fall through to the mail fallback */ }
     }
 
-    // No channel configured: tell the widget so it can offer the direct-email
-    // fallback instead of pretending the message was stored.
+    // No channel configured, or the configured one failed: let the widget open
+    // the visitor's mail client so the message still reaches the team.
     return NextResponse.json({ ok: false, unconfigured: true, contact: emailTo });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message.slice(0, 300) : "The feedback could not be sent." }, { status: 400 });
