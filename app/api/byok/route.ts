@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { allowRequest, clientKey } from "../../../lib/rate-limit";
 
 export const runtime = "edge";
 
@@ -21,6 +22,9 @@ const IMAGE_DATA_URL_PATTERN = /^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z
 
 export async function POST(request: NextRequest) {
   try {
+    if (!allowRequest(`byok:${clientKey(request.headers)}`, 60, 10 * 60_000)) {
+      return NextResponse.json({ error: "Too many provider requests from this connection. Please wait a few minutes." }, { status: 429 });
+    }
     const body = await request.json() as { action?: string; provider?: string; apiKey?: string; model?: string; prompt?: string; voiceId?: string; imageDataUrl?: string };
     const provider = String(body.provider || "");
     const apiKey = String(body.apiKey || "").trim();

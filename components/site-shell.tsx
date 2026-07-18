@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ReactNode, useEffect, useState } from "react";
 import { openPrivacySettings } from "./consent-manager";
+import { FeedbackWidget } from "./feedback-widget";
 
 const navigation = [
   ["Home", "/"],
@@ -78,6 +79,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
         )}
       </header>
       <main id="main-content">{children}</main>
+      <FeedbackWidget />
       <footer className="global-footer">
         <div className="footer-main">
           <div>

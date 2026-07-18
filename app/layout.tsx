@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   authors: [{ name: COMPANY_NAME, url: "https://trenith.com" }, { name: "Sai Phanindra Manikanta Yalamanchili" }],
   creator: COMPANY_NAME,
   publisher: COMPANY_NAME,
-  keywords: ["free online tools", "audio joiner", "video joiner", "PDF tools", "image tools", "audio downloader", "BYOK AI", "browser file tools", "Trenith"],
+  keywords: ["free online tools", "free tools no sign up", "audio converter online free", "metadata remover online", "merge pdf free", "audio joiner", "video joiner", "PDF tools", "image compressor online", "SEO tools free", "audio downloader", "BYOK AI", "browser file tools", "private file tools no upload", "Trenith"],
   alternates: alternateUrls("/"),
   openGraph: { type: "website", locale: siteLanguage === "en-IN" ? "en_IN" : "en_US", url: siteUrl("/"), siteName: "Trenith Tools", title: "Trenith Tools — Free Private File & BYOK AI Tools", description: baseDescription, images: [{ url: "/trenith-og.jpg", width: 630, height: 630, alt: "Trenith Tools" }] },
   twitter: { card: "summary_large_image", title: "Trenith Tools", description: baseDescription, images: ["/trenith-og.jpg"] },

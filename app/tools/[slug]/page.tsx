@@ -12,16 +12,38 @@ export function generateStaticParams() {
   return tools.map((tool) => ({ slug: tool.slug }));
 }
 
+const kindHook: Record<string, string> = {
+  device: "Private, No Upload",
+  web: "No Sign-Up",
+  byok: "Use Your Own API Key",
+};
+
+const kindPromise: Record<string, string> = {
+  device: "Free, private and processed on your device — no upload, no sign-up, no watermark and no artificial file limit.",
+  web: "Free with no sign-up. Only publicly exposed sources are scanned; nothing bypasses logins or DRM.",
+  byok: "Free interface with no Trenith subscription — connect your own provider API key and keep full control of billing.",
+};
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
   const tool = toolBySlug[slug];
   if (!tool) return { title: "Tool not found" };
+  const description = `${tool.description} ${kindPromise[tool.kind]}`;
   return {
-    title: `${tool.name} — Free Online Tool`,
-    description: `${tool.description} Open the free ${tool.name} workspace from Trenith Technologies.`,
-    keywords: [tool.name, `free ${tool.name.toLowerCase()}`, `${tool.category.toLowerCase()} tools`, ...(tool.formats || [])],
+    title: `Free ${tool.name} Online — ${kindHook[tool.kind]}`,
+    description,
+    keywords: [
+      tool.name,
+      `free ${tool.name.toLowerCase()}`,
+      `free ${tool.shortName.toLowerCase()} online`,
+      `${tool.shortName.toLowerCase()} no upload`,
+      `online ${tool.category.toLowerCase()} tools`,
+      `free ${tool.category.toLowerCase()} tools online`,
+      ...(tool.formats || []),
+    ],
     alternates: alternateUrls(`/tools/${tool.slug}`),
-    openGraph: { title: `${tool.name} | Trenith Tools`, description: tool.description, url: siteUrl(`/tools/${tool.slug}`), type: "website" },
+    openGraph: { title: `Free ${tool.name} | Trenith Tools`, description, url: siteUrl(`/tools/${tool.slug}`), type: "website" },
+    twitter: { card: "summary_large_image", title: `Free ${tool.name} Online`, description: tool.description },
   };
 }
 

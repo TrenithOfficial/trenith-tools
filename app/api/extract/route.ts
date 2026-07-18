@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { allowRequest, clientKey } from "../../../lib/rate-limit";
 
 export const runtime = "edge";
 
@@ -80,6 +81,9 @@ function extractTitle(html: string, fallback: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!allowRequest(`extract:${clientKey(request.headers)}`, 30, 10 * 60_000)) {
+      return NextResponse.json({ error: "Too many scans from this connection. Please wait a few minutes." }, { status: 429 });
+    }
     const body = await request.json();
     const target = validatePublicUrl(String(body?.url || ""));
     const direct = AUDIO_PATTERN.test(target.pathname + target.search);

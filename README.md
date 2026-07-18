@@ -61,6 +61,12 @@ Optional runtime configuration:
 | `NEXT_PUBLIC_GOOGLE_ADS_ID` | Loads Ads conversion measurement only after Marketing consent |
 | `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` | Optional Search Console HTML meta verification |
 | `NEXT_PUBLIC_BING_SITE_VERIFICATION` | Optional Bing HTML meta verification |
+| `FEEDBACK_WEBHOOK_URL` | HTTPS webhook that receives feedback-widget submissions as JSON (first delivery choice) |
+| `RESEND_API_KEY` | Resend key used to email feedback submissions when no webhook is set |
+| `FEEDBACK_EMAIL_TO` | Feedback recipient address (defaults to info@trenith.com) |
+| `FEEDBACK_EMAIL_FROM` | Verified Resend sender for feedback email delivery |
+
+Without a feedback delivery variable the widget still works: it offers the visitor a prefilled direct email instead of silently dropping the report.
 
 See [`docs/SEARCH-SETUP.md`](docs/SEARCH-SETUP.md) for the domain, Search Console, Bing, IndexNow and analytics launch sequence. See [`docs/OFFSITE-DISCOVERY.md`](docs/OFFSITE-DISCOVERY.md) for the compliant off-site SEO/AEO/GEO/AIO distribution plan.
 

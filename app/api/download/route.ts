@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { allowRequest, clientKey } from "../../../lib/rate-limit";
 
 export const runtime = "edge";
+
+const MAX_PROXY_BYTES = 2 * 1024 * 1024 * 1024;
 
 const AUDIO_PATTERN = /\.(mp3|wav|m4a|aac|ogg|oga|flac|opus|mpeg|weba)(?:[?#].*)?$/i;
 
@@ -29,15 +32,22 @@ async function fetchPublicAudio(initial: URL) {
 
 export async function GET(request: NextRequest) {
   try {
+    if (!allowRequest(`download:${clientKey(request.headers)}`, 60, 10 * 60_000)) {
+      return NextResponse.json({ error: "Too many downloads from this connection. Please wait a few minutes." }, { status: 429 });
+    }
     const input = request.nextUrl.searchParams.get("url");
     if (!input) throw new Error("Missing audio URL.");
     const url = validateAudioUrl(input);
 
     const response = await fetchPublicAudio(url);
     if (!response.ok || !response.body) throw new Error("The audio source is unavailable.");
+    const announced = Number(response.headers.get("content-length") || 0);
+    if (announced > MAX_PROXY_BYTES) throw new Error("The source file is larger than the download proxy allows.");
     const finalUrl = new URL(response.url || url.href);
     if (isPrivateHost(finalUrl.hostname)) throw new Error("The audio source redirected to a private address.");
-    const filename = decodeURIComponent(finalUrl.pathname.split("/").pop() || "audio.mp3").replace(/[\\/:*?\"<>|]/g, "-");
+    // Strip control characters as well as separator characters so a crafted
+    // path can never inject additional response-header content.
+    const filename = decodeURIComponent(finalUrl.pathname.split("/").pop() || "audio.mp3").replace(/[\\/:*?\"<>|]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "");
 
     return new NextResponse(response.body, {
       headers: {

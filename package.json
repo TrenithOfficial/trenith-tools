@@ -56,5 +56,8 @@
     "wrangler": "4.92.0"
   },
   "type": "module",
-  "displayName": "Trenith Tools"
+  "displayName": "Trenith Tools",
+  "overrides": {
+    "postcss": "^8.5.10"
+  }
 }

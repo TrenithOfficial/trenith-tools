@@ -4,6 +4,7 @@ export const runtime = "edge";
 
 export function GET() {
   const items = [
+    { title: "Feedback everywhere, search-intent pages and security hardening", date: "Sat, 18 Jul 2026 12:00:00 GMT", description: "A floating feedback button on every page, search-intent titles for all 44 tools, zero known production dependency vulnerabilities, header-injection hardening and API burst limits." },
     { title: "Any-key AI Studio, free SEO tools and answer-engine upgrade", date: "Sat, 18 Jul 2026 08:00:00 GMT", description: "Every AI workflow now runs with any connected key with clear provider recommendations, browser-voice speech works with no key, vision keys read scans, and free on-device SERP preview and keyword density tools join the directory." },
     { title: "Deep reliability audit release", date: "Sat, 18 Jul 2026 04:00:00 GMT", description: "Media engine startup fix, full metadata-removal repair with per-format cleaning engines, verified downloads, background-tab resilience and honest size limits." },
     { title: "Verified media and workflow release", date: "Fri, 17 Jul 2026 20:00:00 GMT", description: "True multi-format audio conversion, compatibility decoding, batch downloads, PDF fixes and denser discovery." },
