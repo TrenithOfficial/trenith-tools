@@ -355,6 +355,10 @@ h1 em, h2 em { color: #788194; font-style: normal; font-weight: inherit; }
   .global-nav.is-open { display: flex; }
   .global-nav a { display: block; padding: 12px; }
   .nav-trigger { display: inline-flex; }
+  /* The nav is now absolutely positioned (out of flow), so its margin-left:auto
+     no longer pushes the controls to the right. Right-align the controls here so
+     the brand sits left and Color/Connections/menu sit at the right edge. */
+  .header-controls { margin-left: auto; }
 }
 
 @media (max-width: 860px) {

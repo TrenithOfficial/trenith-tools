@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { allowRequest, clientKey } from "../../../lib/rate-limit";
+import { renderFeedbackEmail, renderFeedbackText } from "../../../lib/feedback-email";
 
 export const runtime = "edge";
 
@@ -38,6 +39,7 @@ export async function POST(request: NextRequest) {
 
     const webhook = process.env.FEEDBACK_WEBHOOK_URL;
     const emailTo = process.env.FEEDBACK_EMAIL_TO || "info@trenith.com";
+    const emailData = { category, message, page, email: submission.email, receivedAt: submission.receivedAt };
 
     // A configured channel that fails (bad key, unverified sender, downtime)
     // must never hard-error the visitor: it degrades to the mail-client
@@ -67,7 +69,8 @@ export async function POST(request: NextRequest) {
             to: [emailTo],
             reply_to: submission.email !== "not provided" ? submission.email : undefined,
             subject: `Tools feedback · ${category} · ${page}`,
-            text: `${message}\n\nPage: ${page}\nReply to: ${submission.email}\nUser agent: ${submission.userAgent}\nReceived: ${submission.receivedAt}`,
+            html: renderFeedbackEmail(emailData),
+            text: renderFeedbackText(emailData),
           }),
         });
         if (delivered.ok) return NextResponse.json({ ok: true });
