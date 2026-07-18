@@ -5,9 +5,10 @@ source_file="node_modules/@6over3/zeroperl-ts/dist/esm/zeroperl.wasm"
 target_file="public/zeroperl.wasm"
 ffmpeg_core_js="node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.js"
 ffmpeg_core_wasm="node_modules/@ffmpeg/core/dist/esm/ffmpeg-core.wasm"
+ffmpeg_class_dir="node_modules/@ffmpeg/ffmpeg/dist/esm"
 ffmpeg_target_dir="public/ffmpeg"
 
-for required in "$source_file" "$ffmpeg_core_js" "$ffmpeg_core_wasm"; do
+for required in "$source_file" "$ffmpeg_core_js" "$ffmpeg_core_wasm" "$ffmpeg_class_dir/worker.js" "$ffmpeg_class_dir/const.js" "$ffmpeg_class_dir/errors.js"; do
   if [[ ! -f "$required" ]]; then
     echo "Missing $required. Run npm install before building." >&2
     exit 1
@@ -17,6 +18,9 @@ done
 cp "$source_file" "$target_file"
 mkdir -p "$ffmpeg_target_dir"
 cp "$ffmpeg_core_js" "$ffmpeg_target_dir/ffmpeg-core.js"
+# The transcoder worker must run unbundled so its dynamic import of the core
+# module resolves natively in the browser instead of through the bundler.
+cp "$ffmpeg_class_dir/worker.js" "$ffmpeg_class_dir/const.js" "$ffmpeg_class_dir/errors.js" "$ffmpeg_target_dir/"
 rm -f "$ffmpeg_target_dir/ffmpeg-core.wasm" \
   "$ffmpeg_target_dir/ffmpeg-core.wasm.part0" \
   "$ffmpeg_target_dir/ffmpeg-core.wasm.part1" \

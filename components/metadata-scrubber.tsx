@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { downloadBlob } from "../lib/client-tools";
+import { stripFileMetadata } from "../lib/metadata-clean";
 
 type MetadataValue = string | number | boolean | null | MetadataValue[] | { [key: string]: MetadataValue };
 type MetadataMap = Record<string, MetadataValue>;
@@ -76,10 +77,8 @@ export function MetadataScrubber() {
   async function cleanOne(item: ScrubItem) {
     update(item.id, { status: "cleaning", error: undefined });
     try {
-      const { parseMetadata, writeMetadata } = await import("@uswriting/exiftool");
-      const cleaned = await writeMetadata(item.file, {}, { args: ["-all=", "-overwrite_original"], fetch: wasmFetch });
-      if (!cleaned.success) throw new Error(cleaned.error);
-      const blob = new Blob([cleaned.data as BlobPart], { type: item.file.type || "application/octet-stream" });
+      const blob = await stripFileMetadata(item.file, wasmFetch);
+      const { parseMetadata } = await import("@uswriting/exiftool");
       const verificationFile = new File([blob], item.file.name, { type: item.file.type, lastModified: Date.now() });
       const verified = await parseMetadata<MetadataMap[]>(verificationFile, { args: ["-json", "-G1", "-s", "-n"], fetch: wasmFetch, transform: (value) => JSON.parse(value) as MetadataMap[] });
       update(item.id, { status: "clean", output: blob, after: verified.success ? privateMetadata(verified.data[0]) : [] });
@@ -114,7 +113,7 @@ export function MetadataScrubber() {
 
     {items.length > 0 && <section className="workspace-panel metadata-results">
       <div className="metadata-results-head"><div><span className="panel-label">INSPECTION REPORT</span><h2>{items.length} file{items.length === 1 ? "" : "s"}</h2></div><div><button className="secondary-button" onClick={() => setItems([])} disabled={busy}>Clear</button><button className="primary-action" onClick={cleanAll} disabled={busy || !items.some((item) => item.status === "ready" || item.status === "error")}>{busy ? "Working…" : "Remove detected metadata"}<span>→</span></button></div></div>
-      <div className="metadata-list">{items.map((item) => <article key={item.id} className={`metadata-row ${item.status}`}><button className="metadata-summary" onClick={() => setExpanded(expanded === item.id ? null : item.id)}><span className="metadata-file-icon">{item.file.name.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE"}</span><div><strong>{item.file.webkitRelativePath || item.file.name}</strong><small>{(item.file.size / 1024 / 1024).toFixed(2)} MB · {statusLabel(item)}</small></div><b>{expanded === item.id ? "−" : "+"}</b></button>{expanded === item.id && <div className="metadata-details">{item.error && <p className="metadata-warning">{item.error}</p>}{item.before.length ? <><h3>Detected before cleaning</h3><dl>{item.before.slice(0, 100).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>{item.before.length > 100 && <p>Showing 100 of {item.before.length} fields.</p>}</> : <p>No removable metadata fields were detected.</p>}{item.status === "clean" && <p className="metadata-clean-note">Verification complete: {item.after.length} non-operational metadata fields remain.</p>}<div className="metadata-row-actions">{item.status === "ready" && <button className="secondary-button" onClick={() => cleanOne(item)}>Clean this file</button>}{item.output && <button className="secondary-button" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)}>Download cleaned file</button>}</div></div>}</article>)}</div>
+      <div className="metadata-list">{items.map((item) => <article key={item.id} className={`metadata-row ${item.status}`}><button className="metadata-summary" onClick={() => setExpanded(expanded === item.id ? null : item.id)}><span className="metadata-file-icon">{item.file.name.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE"}</span><div><strong>{item.file.webkitRelativePath || item.file.name}</strong><small>{(item.file.size / 1024 / 1024).toFixed(2)} MB · {statusLabel(item)}</small></div><b>{expanded === item.id ? "−" : "+"}</b></button>{expanded === item.id && <div className="metadata-details">{item.error && <p className="metadata-warning">{item.error}</p>}{item.before.length ? <><h3>Detected before cleaning</h3><dl>{item.before.slice(0, 100).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>{item.before.length > 100 && <p>Showing 100 of {item.before.length} fields.</p>}</> : <p>No removable metadata fields were detected.</p>}{item.status === "clean" && <p className="metadata-clean-note">Verification complete: {item.after.length} non-operational metadata fields remain.</p>}{item.status === "clean" && item.after.length > 0 && <><h3>Remaining after cleaning</h3><dl>{item.after.slice(0, 100).map(([key, value]) => <div key={`after-${key}`}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></>}<div className="metadata-row-actions">{item.status === "ready" && <button className="secondary-button" onClick={() => cleanOne(item)}>Clean this file</button>}{item.output && <button className="secondary-button" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)}>Download cleaned file</button>}</div></div>}</article>)}</div>
       {items.some((item) => item.output) && <button className="workspace-run" onClick={downloadZip}>Download all cleaned files as ZIP <span>↓</span></button>}
       <p className="metadata-caveat">Verification is format-aware, but no automated remover can promise that every proprietary application-specific trace is gone. Review high-risk files with the receiving application before publication.</p>
     </section>}

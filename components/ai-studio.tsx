@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { ByokConnection, providerDefinitions, readSessionConnections } from "../lib/byok";
+import { useMemo, useState } from "react";
+import { providerDefinitions, useSessionConnections } from "../lib/byok";
 import { tools } from "../lib/catalog";
 
 const workflowPrompts: Record<string, string> = {
@@ -52,30 +52,24 @@ export function AiStudio() {
   const params = useSearchParams();
   const workflow = params.get("workflow") || "ai-song-generator";
   const workflowTool = tools.find((tool) => tool.slug === workflow && tool.kind === "byok");
-  const [connections, setConnections] = useState<ByokConnection[]>([]);
-  const [connectionId, setConnectionId] = useState("");
+  const connections = useSessionConnections();
+  const [selectedConnectionId, setSelectedConnectionId] = useState("");
   const [prompt, setPrompt] = useState(workflowPrompts[workflow] || "Describe the result you want to create.");
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [result, setResult] = useState<StudioResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [promptWorkflow, setPromptWorkflow] = useState(workflow);
 
-  useEffect(() => {
-    const load = () => {
-      const next = readSessionConnections();
-      setConnections(next);
-      setConnectionId((current) => current || next[0]?.id || "");
-    };
-    const frame = requestAnimationFrame(load);
-    window.addEventListener("trenith-connections-change", load);
-    return () => { cancelAnimationFrame(frame); window.removeEventListener("trenith-connections-change", load); };
-  }, []);
+  // Reset the brief when the visitor switches workflows; adjusting state during
+  // render keeps the reset synchronous without an effect.
+  if (promptWorkflow !== workflow) {
+    setPromptWorkflow(workflow);
+    setPrompt(workflowPrompts[workflow] || "Describe the result you want to create.");
+    setSourceFile(null);
+  }
 
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => { setPrompt(workflowPrompts[workflow] || "Describe the result you want to create."); setSourceFile(null); });
-    return () => cancelAnimationFrame(frame);
-  }, [workflow]);
-
+  const connectionId = selectedConnectionId && connections.some((item) => item.id === selectedConnectionId) ? selectedConnectionId : connections[0]?.id || "";
   const connection = useMemo(() => connections.find((item) => item.id === connectionId), [connections, connectionId]);
 
   async function run() {
@@ -124,7 +118,7 @@ export function AiStudio() {
   return <div className="studio-layout">
     <section className="workspace-panel studio-input">
       <div className="studio-heading"><span className="panel-label">ACTIVE WORKFLOW</span><h2>{workflowTool?.name || "AI provider runner"}</h2><p>{workflowTool?.description || "Send a real request using one of your session connections."}</p></div>
-      <label className="studio-field">Provider connection<select value={connectionId} onChange={(event) => setConnectionId(event.target.value)}><option value="">Select a session connection</option>{connections.map((item) => <option key={item.id} value={item.id}>{item.label} · {providerDefinitions[item.provider].name}</option>)}</select></label>
+      <label className="studio-field">Provider connection<select value={connectionId} onChange={(event) => setSelectedConnectionId(event.target.value)}><option value="">Select a session connection</option>{connections.map((item) => <option key={item.id} value={item.id}>{item.label} · {providerDefinitions[item.provider].name}</option>)}</select></label>
       {!connections.length && <div className="studio-empty"><span>⌁</span><div><strong>No provider is connected</strong><p>Add a session connection, test it, then return here to run a request.</p></div><Link href="/connections">Open Connections →</Link></div>}
       {compatibleOnlyWorkflows.has(workflow) && <div className="connection-notice"><span>↗</span><p>This media workflow needs a compatible endpoint that implements <strong>{workflow}</strong>. Trenith sends a JSON brief, or multipart form data when a file is required, and displays the endpoint response.</p></div>}
       {fileWorkflows.has(workflow) && <label className="studio-field">Authorized source file<input type="file" accept={workflowAccept[workflow]} onChange={(event) => setSourceFile(event.target.files?.[0] || null)} />{sourceFile && <small>{sourceFile.name} · {(sourceFile.size / 1024 / 1024).toFixed(2)} MB</small>}</label>}

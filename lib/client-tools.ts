@@ -346,24 +346,21 @@ export async function joinVideoFiles(files: File[], progress: ProgressHandler) {
         await waitForMedia(video, "loadedmetadata");
       }
 
-      progress(Math.round((index / files.length) * 94), `Recording clip ${index + 1} of ${files.length}`);
+      progress(Math.max(1, Math.round((index / files.length) * 94)), `Recording clip ${index + 1} of ${files.length}`);
       const ended = waitForMedia(video, "ended");
       await video.play();
-      await new Promise<void>((resolve, reject) => {
-        const render = () => {
-          try {
-            paint.fillStyle = "#000";
-            paint.fillRect(0, 0, canvas.width, canvas.height);
-            const ratio = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
-            const width = video.videoWidth * ratio;
-            const height = video.videoHeight * ratio;
-            paint.drawImage(video, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
-            if (video.ended) resolve(); else requestAnimationFrame(render);
-          } catch (error) { reject(error); }
-        };
-        render();
-      });
-      await ended;
+      const paintFrame = () => {
+        paint.fillStyle = "#000";
+        paint.fillRect(0, 0, canvas.width, canvas.height);
+        const ratio = Math.min(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+        const width = video.videoWidth * ratio;
+        const height = video.videoHeight * ratio;
+        paint.drawImage(video, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+      };
+      // An interval keeps painting (and the recording progressing) even when the
+      // tab is backgrounded; requestAnimationFrame would pause and stall the join.
+      const painter = window.setInterval(() => { try { paintFrame(); } catch { /* skip frame */ } }, 33);
+      try { await ended; paintFrame(); } finally { window.clearInterval(painter); }
     }
     recorder.stop();
     await stopped;
@@ -501,28 +498,45 @@ export async function imagesToPdf(files: File[], progress: ProgressHandler) {
   return new Blob([await document.save({ useObjectStreams: true }) as BlobPart], { type: "application/pdf" });
 }
 
-export async function processImage(file: File, width: number, quality: number, format: "image/jpeg" | "image/png" | "image/webp") {
+async function decodeImageSource(file: File): Promise<ImageBitmap | HTMLImageElement> {
+  // createImageBitmap decodes off the rendering pipeline, so it keeps working
+  // when the tab is backgrounded; HTMLImageElement.decode() can stall there.
+  if ("createImageBitmap" in window) {
+    try { return await createImageBitmap(file); } catch { /* fall through to the element decoder */ }
+  }
   const url = URL.createObjectURL(file);
   try {
     const image = new Image();
     image.src = url;
     await image.decode();
-    const scale = Math.min(1, width / image.naturalWidth);
+    return image;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function processImage(file: File, width: number, quality: number, format: "image/jpeg" | "image/png" | "image/webp") {
+  const source = await decodeImageSource(file);
+  try {
+    const sourceWidth = "naturalWidth" in source ? source.naturalWidth : source.width;
+    const sourceHeight = "naturalHeight" in source ? source.naturalHeight : source.height;
+    if (!sourceWidth || !sourceHeight) throw new Error("This image could not be decoded by the browser.");
+    const scale = Math.min(1, width / sourceWidth);
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    canvas.width = Math.max(1, Math.round(sourceWidth * scale));
+    canvas.height = Math.max(1, Math.round(sourceHeight * scale));
     const context = canvas.getContext("2d");
     if (!context) throw new Error("Image processing is unavailable.");
     if (format === "image/jpeg") {
       context.fillStyle = "#fff";
       context.fillRect(0, 0, canvas.width, canvas.height);
     }
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    context.drawImage(source, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, format, quality));
     if (!blob) throw new Error("The browser could not export this image.");
     const extension = format.split("/")[1].replace("jpeg", "jpg");
     return { blob, filename: `${safeStem(file.name)}-${canvas.width}w.${extension}`, width: canvas.width, height: canvas.height };
   } finally {
-    URL.revokeObjectURL(url);
+    if ("close" in source) source.close();
   }
 }

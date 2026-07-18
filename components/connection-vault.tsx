@@ -1,22 +1,23 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ByokConnection,
   clearEncryptedConnections,
-  hasEncryptedVault,
   providerDefinitions,
   ProviderId,
-  readSessionConnections,
   saveEncryptedConnections,
   unlockEncryptedConnections,
+  useHasEncryptedVault,
+  useSessionConnections,
   writeSessionConnections,
 } from "../lib/byok";
 
 const providerOrder: ProviderId[] = ["openai", "anthropic", "gemini", "elevenlabs", "openrouter", "compatible"];
 
 export function ConnectionVault() {
-  const [connections, setConnections] = useState<ByokConnection[]>([]);
+  const connections = useSessionConnections();
+  const encryptedAvailable = useHasEncryptedVault();
   const [provider, setProvider] = useState<ProviderId>("openai");
   const [label, setLabel] = useState("My OpenAI connection");
   const [apiKey, setApiKey] = useState("");
@@ -27,12 +28,6 @@ export function ConnectionVault() {
   const [error, setError] = useState("");
   const [testing, setTesting] = useState(false);
   const [passphrase, setPassphrase] = useState("");
-  const [encryptedAvailable, setEncryptedAvailable] = useState(false);
-
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => { setConnections(readSessionConnections()); setEncryptedAvailable(hasEncryptedVault()); });
-    return () => cancelAnimationFrame(frame);
-  }, []);
 
   const definition = providerDefinitions[provider];
   const sessionSummary = useMemo(() => `${connections.length} active connection${connections.length === 1 ? "" : "s"} in this browser session`, [connections.length]);
@@ -50,8 +45,7 @@ export function ConnectionVault() {
     if (!model.trim()) { setError("Enter the model identifier used by your provider."); return; }
     if (provider === "compatible" && !/^https:\/\//i.test(endpoint)) { setError("A compatible endpoint must use a complete HTTPS URL."); return; }
     const connection: ByokConnection = { id: crypto.randomUUID(), provider, label: label.trim() || definition.name, apiKey: apiKey.trim(), model: model.trim(), voiceId: voiceId.trim() || undefined, endpoint: endpoint.trim() || undefined };
-    const next = [...connections, connection];
-    setConnections(next); writeSessionConnections(next); setApiKey(""); setStatus("Connection saved for this browser session.");
+    writeSessionConnections([...connections, connection]); setApiKey(""); setStatus("Connection saved for this browser session.");
   }
 
   async function testConnection() {
@@ -73,19 +67,19 @@ export function ConnectionVault() {
   }
 
   function removeConnection(id: string) {
-    const next = connections.filter((connection) => connection.id !== id);
-    setConnections(next); writeSessionConnections(next); setStatus("Connection removed from this session.");
+    writeSessionConnections(connections.filter((connection) => connection.id !== id));
+    setStatus("Connection removed from this session.");
   }
 
   async function encryptVault() {
     setError(""); setStatus("");
-    try { if (!connections.length) throw new Error("Add at least one session connection before encrypting the vault."); await saveEncryptedConnections(connections, passphrase); setEncryptedAvailable(true); setPassphrase(""); setStatus("Encrypted device vault saved. Your passphrase is not stored."); }
+    try { if (!connections.length) throw new Error("Add at least one session connection before encrypting the vault."); await saveEncryptedConnections(connections, passphrase); setPassphrase(""); setStatus("Encrypted device vault saved. Your passphrase is not stored."); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "The encrypted vault could not be saved."); }
   }
 
   async function unlockVault() {
     setError(""); setStatus("");
-    try { const unlocked = await unlockEncryptedConnections(passphrase); setConnections(unlocked); setPassphrase(""); setStatus("Encrypted connections unlocked for this session."); }
+    try { await unlockEncryptedConnections(passphrase); setPassphrase(""); setStatus("Encrypted connections unlocked for this session."); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "The encrypted vault could not be unlocked."); }
   }
 
@@ -100,7 +94,7 @@ export function ConnectionVault() {
 
     <aside className="vault-sidebar">
       <section className="workspace-panel session-panel"><span className="panel-label">ACTIVE SESSION</span><h2>{sessionSummary}</h2>{connections.length ? <div className="saved-connections">{connections.map((connection) => <article key={connection.id}><i>{providerDefinitions[connection.provider].name.slice(0, 1)}</i><div><strong>{connection.label}</strong><span>{providerDefinitions[connection.provider].name} · {connection.model}</span><small>Key ending ••••{connection.apiKey.slice(-4)}</small></div><button onClick={() => removeConnection(connection.id)} aria-label={`Remove ${connection.label}`}>×</button></article>)}</div> : <div className="vault-empty"><span>⌁</span><p>No active session connections yet.</p></div>}</section>
-      <section className="workspace-panel encrypted-panel"><span className="panel-label">OPTIONAL DEVICE VAULT</span><h2>{encryptedAvailable ? "Encrypted vault detected" : "Encrypt connections on this device"}</h2><p>AES-256-GCM encryption with a passphrase-derived key. Trenith cannot recover a forgotten passphrase.</p><label>Vault passphrase<input type="password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} autoComplete="new-password" /></label><div>{encryptedAvailable && <button className="secondary-button" onClick={unlockVault}>Unlock into session</button>}<button className="secondary-button" onClick={encryptVault}>Save encrypted vault</button></div>{encryptedAvailable && <button className="danger-link" onClick={() => { clearEncryptedConnections(); setEncryptedAvailable(false); setStatus("Encrypted device vault deleted."); }}>Delete encrypted vault</button>}</section>
+      <section className="workspace-panel encrypted-panel"><span className="panel-label">OPTIONAL DEVICE VAULT</span><h2>{encryptedAvailable ? "Encrypted vault detected" : "Encrypt connections on this device"}</h2><p>AES-256-GCM encryption with a passphrase-derived key. Trenith cannot recover a forgotten passphrase.</p><label>Vault passphrase<input type="password" value={passphrase} onChange={(event) => setPassphrase(event.target.value)} autoComplete="new-password" /></label><div>{encryptedAvailable && <button className="secondary-button" onClick={unlockVault}>Unlock into session</button>}<button className="secondary-button" onClick={encryptVault}>Save encrypted vault</button></div>{encryptedAvailable && <button className="danger-link" onClick={() => { clearEncryptedConnections(); setStatus("Encrypted device vault deleted."); }}>Delete encrypted vault</button>}</section>
       {(status || error) && <div className={error ? "vault-message error" : "vault-message"} aria-live="polite">{error || status}</div>}
     </aside>
   </div>;

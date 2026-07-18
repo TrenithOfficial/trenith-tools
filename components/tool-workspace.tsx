@@ -193,7 +193,11 @@ function FileWorkspace({ tool }: { tool: ToolDefinition }) {
       else if (isImage) { const output = await processImage(files[0], tool.slug === "image-converter" ? 100_000 : imageWidth, imageQuality / 100, imageFormat); blob = output.blob; filename = output.filename; update(100, `${output.width} × ${output.height} ready`); }
       else throw new Error("This workflow is not available in the current browser.");
       setResult({ blob, filename, url: URL.createObjectURL(blob) });
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "The selected files could not be processed."); }
+    } catch (caught) {
+      setProgress(0);
+      setProgressLabel("");
+      setError(caught instanceof Error ? caught.message : typeof caught === "string" && caught ? caught : "The selected files could not be processed.");
+    }
     finally { setBusy(false); }
   }
 

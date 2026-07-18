@@ -5,7 +5,7 @@ A free, light-first, device-focused workspace for file privacy, media, PDFs, ima
 ## Working tools
 
 - Public audio discovery and authorized direct downloads
-- Metadata inspection, removal, verification and ZIP export for ExifTool-compatible file families
+- Metadata inspection, removal, verification and ZIP export with per-format cleaning engines: ExifTool for images and camera formats, a document rewriter for PDFs, direct property scrubbing for Word/Excel/PowerPoint, and lossless FFmpeg stream copies for MP3, FLAC, Ogg, Opus, WAV, AIFF and WebM audio
 - Audio folder/file joining with native decoding, FFmpeg compatibility fallback and direct-to-disk WAV/RF64 streaming for large jobs
 - True MP3, WAV, FLAC, Ogg Vorbis, Opus and M4A/AAC conversion with preview and explicit download
 - Audio trimming and 0–400% volume adjustment with lossless WAV output

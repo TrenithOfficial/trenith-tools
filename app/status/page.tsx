@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 const engineNotes: Record<string, string> = {
-  "metadata-remover": "ExifTool WebAssembly · writable formats are cleaned and re-scanned",
+  "metadata-remover": "Per-format engines · ExifTool for images, document rewriting for PDF/Office, FFmpeg stream copy for audio; every result is re-scanned",
   "audio-downloader": "Public URL scanner · no login, DRM or access-control bypass",
   "audio-joiner": "Web Audio with FFmpeg compatibility fallback · direct-to-disk mode for large jobs",
   "audio-converter": "FFmpeg WebAssembly · MP3, WAV, FLAC, Ogg, Opus and M4A/AAC output",

@@ -1,5 +1,7 @@
 "use client";
 
+import { useMemo, useSyncExternalStore } from "react";
+
 export type ProviderId = "openai" | "anthropic" | "gemini" | "elevenlabs" | "openrouter" | "compatible";
 
 export type ByokConnection = {
@@ -33,6 +35,27 @@ export function writeSessionConnections(connections: ByokConnection[]) {
   window.dispatchEvent(new CustomEvent("trenith-connections-change"));
 }
 
+function subscribeToVaultChanges(callback: () => void) {
+  window.addEventListener("trenith-connections-change", callback);
+  window.addEventListener("storage", callback);
+  return () => {
+    window.removeEventListener("trenith-connections-change", callback);
+    window.removeEventListener("storage", callback);
+  };
+}
+
+// useSyncExternalStore keeps reads hydration-safe and immediate; deferring the
+// first read behind requestAnimationFrame left stale empty state in
+// backgrounded tabs, where animation frames never fire.
+export function useSessionConnections(): ByokConnection[] {
+  const raw = useSyncExternalStore(subscribeToVaultChanges, () => sessionStorage.getItem(SESSION_KEY) || "[]", () => "[]");
+  return useMemo(() => { try { return JSON.parse(raw) as ByokConnection[]; } catch { return []; } }, [raw]);
+}
+
+export function useHasEncryptedVault(): boolean {
+  return useSyncExternalStore(subscribeToVaultChanges, () => Boolean(localStorage.getItem(ENCRYPTED_KEY)), () => false);
+}
+
 function toBase64(bytes: Uint8Array) {
   let binary = "";
   bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
@@ -56,6 +79,7 @@ export async function saveEncryptedConnections(connections: ByokConnection[], pa
   const key = await deriveKey(passphrase, salt);
   const cipher = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(JSON.stringify(connections)));
   localStorage.setItem(ENCRYPTED_KEY, JSON.stringify({ salt: toBase64(salt), iv: toBase64(iv), cipher: toBase64(new Uint8Array(cipher)), version: 1 }));
+  window.dispatchEvent(new CustomEvent("trenith-connections-change"));
 }
 
 export async function unlockEncryptedConnections(passphrase: string) {
@@ -77,6 +101,7 @@ export async function unlockEncryptedConnections(passphrase: string) {
 
 export function clearEncryptedConnections() {
   localStorage.removeItem(ENCRYPTED_KEY);
+  window.dispatchEvent(new CustomEvent("trenith-connections-change"));
 }
 
 export function hasEncryptedVault() {

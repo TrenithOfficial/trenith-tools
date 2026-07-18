@@ -43,7 +43,7 @@ async function loadChunkedWasm() {
   return URL.createObjectURL(new Blob(chunks, { type: "application/wasm" }));
 }
 
-async function getFfmpeg(progress?: (percent: number, message: string) => void) {
+export async function getFfmpeg(progress?: (percent: number, message: string) => void) {
   if (!ffmpegPromise) {
     ffmpegPromise = (async () => {
       progress?.(4, "Loading the private media engine (first use only)");
@@ -51,17 +51,29 @@ async function getFfmpeg(progress?: (percent: number, message: string) => void) 
       const ffmpeg = new FFmpeg();
       const wasmURL = await loadChunkedWasm();
       try {
-        await ffmpeg.load({ coreURL: "/ffmpeg/ffmpeg-core.js", wasmURL });
+        await ffmpeg.load({ coreURL: "/ffmpeg/ffmpeg-core.js", wasmURL, classWorkerURL: `${window.location.origin}/ffmpeg/worker.js` });
       } finally {
         URL.revokeObjectURL(wasmURL);
       }
       return ffmpeg;
     })().catch((error) => {
       ffmpegPromise = null;
-      throw error;
+      throw error instanceof Error ? error : new Error(typeof error === "string" && error ? error : "The private media engine could not start. Refresh the page and try again.");
     });
   }
   return ffmpegPromise;
+}
+
+// The engine holds the whole source plus its output inside 32-bit WebAssembly
+// memory, so very large files can never fit. Fail fast with an honest message
+// instead of downloading the engine and then dying with a generic error.
+export const MAX_ENGINE_INPUT_BYTES = 1536 * 1024 * 1024;
+
+export function assertEngineCapacity(file: File) {
+  if (file.size > MAX_ENGINE_INPUT_BYTES) {
+    const gigabytes = (file.size / 1024 / 1024 / 1024).toFixed(1);
+    throw new Error(`${file.name} is ${gigabytes} GB. The in-browser engine can process files up to about 1.5 GB; trim or split the recording first, or convert it with a desktop tool.`);
+  }
 }
 
 export async function transcodeAudio(
@@ -71,6 +83,7 @@ export async function transcodeAudio(
   progress: (percent: number, message: string) => void,
 ) {
   const profile = audioProfiles[format];
+  assertEngineCapacity(file);
   const ffmpeg = await getFfmpeg(progress);
   const token = crypto.randomUUID().replaceAll("-", "");
   const inputName = `input-${token}.${safeExtension(file.name)}`;
@@ -102,6 +115,7 @@ export async function transcodeAudio(
 }
 
 export async function decodeAudioWithFallback(file: File, progress?: (message: string) => void) {
+  assertEngineCapacity(file);
   const ffmpeg = await getFfmpeg((_, message) => progress?.(message));
   const token = crypto.randomUUID().replaceAll("-", "");
   const inputName = `decode-${token}.${safeExtension(file.name)}`;

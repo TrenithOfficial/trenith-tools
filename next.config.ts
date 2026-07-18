@@ -15,7 +15,7 @@ const nextConfig: NextConfig = {
       "font-src 'self' data:",
       "media-src 'self' blob: https:",
       "worker-src 'self' blob:",
-      "connect-src 'self' https: wss:",
+      "connect-src 'self' blob: https: wss:",
       "upgrade-insecure-requests",
     ].join("; ");
     return [{ source: "/(.*)", headers: [
