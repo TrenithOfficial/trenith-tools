@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Trenith Tools",
     short_name: "Trenith",
-    description: "Free device-first file tools and BYOK AI workspace.",
+    description: "Free device-first tools, BYOK AI and encrypted Watch Together rooms with synchronized OTT playback, video and voice.",
     start_url: "/",
     display: "standalone",
     background_color: "#0c0e14",

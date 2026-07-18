@@ -35,7 +35,7 @@ export function OrbitVisual() {
         <g fill="#56d7ff" filter="url(#glow)"><circle cx="70" cy="250" r="4.5" /><circle cx="150" cy="118" r="3.5" /><circle cx="176" cy="404" r="4" /></g>
       </svg>
       <div className="orbit-core">
-        <Image className="orbit-mark" src="/trenith-mark-dark.png" width={62} height={62} alt="Trenith" priority />
+        <Image className="orbit-mark" src="/trenith-mark-dark.png" width={62} height={62} alt="Trenith" priority unoptimized />
         <strong>Trenith<br />Tools</strong>
       </div>
       <div className="proof-node node-one"><span><OnDeviceIcon /></span><strong>ON YOUR DEVICE</strong><small>Audio, video, PDF &amp; images</small></div>

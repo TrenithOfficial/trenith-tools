@@ -1,12 +1,14 @@
 # Trenith Tools
 
-> Free private file utilities and BYOK AI workflows built by Trenith Technologies Private Limited (CIN U62099TS2026PTC216554) for India and worldwide.
+> Free private file utilities, BYOK AI and encrypted Watch Together rooms built by Trenith Technologies Private Limited (CIN U62099TS2026PTC216554) for India and worldwide.
 
 Canonical global site: https://tools.trenith.com
 India regional site: https://tools.trenith.in
 
 ## Start here
 - /tools — searchable directory of every working tool
+- /watch-together — free synchronized OTT watch rooms with encrypted chat, optional camera and microphone
+- /watch-together/supported — current provider/browser compatibility and extension setup
 - /tools/metadata-remover — local metadata inspection, removal and verification
 - /tools/audio-joiner — ordered file/folder joining with large-job streaming
 - /tools/audio-converter — private MP3, WAV, FLAC, Ogg, Opus and M4A/AAC conversion
@@ -34,3 +36,5 @@ India regional site: https://tools.trenith.in
 - The metadata remover supports ExifTool-compatible formats but cannot guarantee removal of proprietary or visible traces.
 - The public source scanner does not bypass authentication, DRM or platform access controls.
 - Provider-dependent features require a compatible user-owned key; no generation credits are bundled.
+- Watch Together never retransmits the OTT title. Each participant uses a lawful provider account. Launch web adapters cover YouTube, Netflix, Prime Video and JioHotstar; other listed HTML5 providers are beta, and native TV/mobile apps are not controlled.
+- Room chat and playback events are encrypted in the browser and short-lived. Camera/microphone uses WebRTC, remains off by default and is limited to 6 media participants; sync/chat supports up to 25.

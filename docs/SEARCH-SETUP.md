@@ -29,7 +29,7 @@ Attaching both hostnames to one build is not recommended because a static build 
 4. Wait for DNS propagation and click Verify.
 5. In the `trenith.com` property, submit `https://tools.trenith.com/sitemap.xml`.
 6. In the `trenith.in` property, submit `https://tools.trenith.in/sitemap.xml`.
-7. Use URL Inspection on the homepage, `/tools`, `/tools/metadata-remover`, `/tools/audio-joiner` and `/guides`; request indexing after the live test passes.
+7. Use URL Inspection on the homepage, `/tools`, `/watch-together`, `/watch-together/supported`, `/tools/metadata-remover`, `/tools/audio-joiner` and `/guides`; request indexing after the live test passes. Private `/watch-together/room/*` URLs are intentionally `noindex` and must never be submitted.
 8. Follow the earned-discovery and answer-engine publishing checklist in [`OFFSITE-DISCOVERY.md`](./OFFSITE-DISCOVERY.md). Do not buy links, automate directory submissions or publish fake reviews.
 9. Check Pages, Sitemaps, HTTPS and Core Web Vitals weekly after launch.
 10. Optional: copy the HTML verification tokens into `NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION` in the matching Vercel project and redeploy. DNS verification remains the durable method.
@@ -38,7 +38,7 @@ Attaching both hostnames to one build is not recommended because a static build 
 
 1. Sign in to Bing Webmaster Tools.
 2. Import both verified Search Console properties, or add each site manually.
-3. The supplied Bing verification file is published at `/BingSiteAuth.xml`. Add both custom-domain sites in Bing and choose XML file verification; Bing should find the same file on each deployment.
+3. Prefer importing the verified Search Console properties. If manual verification is required, use the DNS method and keep the supplied verification value in the protected DNS/account configuration rather than the public source repository.
 4. Submit each domain's `/sitemap.xml`.
 5. Use URL Submission for the same priority URLs.
 6. Enable IndexNow and create a key in Bing Webmaster Tools.

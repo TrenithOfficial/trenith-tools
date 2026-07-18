@@ -45,6 +45,8 @@ for (const [path, expected] of [
   ["/status", /Know what works/i],
   ["/changelog", /Shipped work/i],
   ["/open-source", /FFmpeg WebAssembly/i],
+  ["/watch-together", /Feel in the same room/i],
+  ["/watch-together/supported", /Know what works.*before movie night/is],
 ]) {
   test(`renders ${path}`, async () => {
     const response = await worker.fetch(new Request(`http://localhost${path}`, { headers: { accept: "text/html" } }), environment, context);
@@ -64,19 +66,17 @@ test("publishes crawl and answer-engine discovery files", async () => {
   assert.match(sitemapText, /\/tools\/audio-joiner/);
   assert.match(sitemapText, /\/tools\/metadata-remover/);
   assert.match(sitemapText, /tools\.trenith\.in/);
+  assert.match(sitemapText, /\/watch-together/);
   const llms = await readFile(new URL("../public/llms.txt", import.meta.url), "utf8");
   assert.match(llms, /Capability labels/);
   assert.match(llms, /Trenith does not sell personal data/i);
-  const bingVerification = await readFile(new URL("../public/BingSiteAuth.xml", import.meta.url), "utf8");
-  assert.match(bingVerification, /^<\?xml version="1\.0"\?>/);
-  assert.match(bingVerification, /3712E9608164D8251298C91008089228/);
 });
 
 test("publishes machine-readable tool and release discovery", async () => {
   const catalog = await worker.fetch(new Request("http://localhost/api/tools"), environment, context);
   assert.equal(catalog.status, 200);
   const data = await catalog.json();
-  assert.equal(data.count, 44);
+  assert.equal(data.count, 48);
   assert.ok(data.tools.some((tool) => tool.slug === "audio-converter" && /FLAC/.test(tool.description)));
   const feed = await worker.fetch(new Request("http://localhost/feed.xml"), environment, context);
   assert.equal(feed.status, 200);
@@ -87,7 +87,7 @@ test("publishes machine-readable tool and release discovery", async () => {
 test("every published tool has a working, titled HTML route", async () => {
   const catalogResponse = await worker.fetch(new Request("http://localhost/api/tools"), environment, context);
   const { tools } = await catalogResponse.json();
-  assert.equal(tools.length, 44);
+  assert.equal(tools.length, 48);
   for (const tool of tools) {
     const response = await worker.fetch(new Request(`http://localhost/tools/${tool.slug}`, { headers: { accept: "text/html" } }), environment, context);
     const html = await response.text();

@@ -10,8 +10,8 @@ import { FeedbackWidget } from "./feedback-widget";
 const navigation = [
   ["Home", "/"],
   ["All Tools", "/tools"],
+  ["Watch Together", "/watch-together"],
   ["Status", "/status"],
-  ["Audio", "/tools?category=Audio"],
   ["Guides", "/guides"],
   ["AI Studio", "/studio"],
 ];
@@ -51,7 +51,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="global-header">
         <Link className="header-brand" href="/" aria-label="Trenith Tools home">
-          <Image src="/trenith-lockup.png" width={165} height={60} alt="Trenith" priority />
+          <Image src="/trenith-lockup.png" width={165} height={60} alt="Trenith" priority unoptimized />
           <span>Tools</span>
         </Link>
         <nav className={menuOpen ? "global-nav is-open" : "global-nav"} aria-label="Primary navigation">
@@ -83,11 +83,11 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <footer className="global-footer">
         <div className="footer-main">
           <div>
-            <Link className="footer-brand" href="/"><Image src="/trenith-lockup.png" width={150} height={55} alt="Trenith" /><span>Tools</span></Link>
+            <Link className="footer-brand" href="/"><Image src="/trenith-lockup.png" width={150} height={55} alt="Trenith" unoptimized /><span>Tools</span></Link>
             <p>Free media, document and AI-connected utilities built by Trenith Technologies Pvt Ltd.</p>
           </div>
           <div className="footer-column"><strong>Tools</strong><Link href="/tools/metadata-remover">Metadata remover</Link><Link href="/tools?category=Audio">Audio</Link><Link href="/tools?category=Video">Video</Link><Link href="/tools?category=PDF">PDF</Link><Link href="/tools?category=Image">Images</Link></div>
-          <div className="footer-column"><strong>Platform</strong><Link href="/status">Tool status</Link><Link href="/changelog">Changelog</Link><Link href="/studio">AI Studio</Link><Link href="/connections">BYOK Connections</Link><Link href="/guides">Guides</Link><Link href="/about">About Trenith</Link><a href="https://www.trenith.com/contact?utm_source=trenith_tools&utm_medium=product&utm_campaign=footer" target="_blank" rel="noreferrer">Build with Trenith ↗</a></div>
+          <div className="footer-column"><strong>Platform</strong><Link href="/watch-together">Watch Together</Link><Link href="/watch-together/supported">Streaming compatibility</Link><Link href="/status">Tool status</Link><Link href="/changelog">Changelog</Link><Link href="/studio">AI Studio</Link><Link href="/connections">BYOK Connections</Link><Link href="/guides">Guides</Link><Link href="/about">About Trenith</Link><a href="https://www.trenith.com/contact?utm_source=trenith_tools&utm_medium=product&utm_campaign=footer" target="_blank" rel="noreferrer">Build with Trenith ↗</a></div>
           <div className="footer-column"><strong>Trust</strong><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/cookies">Cookies</Link><button className="footer-settings" onClick={openPrivacySettings}>Privacy settings</button><Link href="/privacy-choices">Privacy choices</Link><Link href="/security">Security</Link><Link href="/sub-processors">Subprocessors</Link><Link href="/open-source">Open-source notices</Link><Link href="/copyright">Copyright</Link><Link href="/accessibility">Accessibility</Link></div>
         </div>
         <div className="footer-bottom"><span>© 2026 Trenith Technologies Pvt Ltd</span><span>Private, device-first tools · Hyderabad, India</span></div>

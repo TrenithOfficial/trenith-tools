@@ -1,7 +1,6 @@
 export const SITE_NAME = "Trenith Tools";
 export const COMPANY_NAME = "Trenith Technologies Private Limited";
 export const COMPANY_CIN = "U62099TS2026PTC216554";
-export const COMPANY_ADDRESS = "Plot No. 272, Pragatinagar, Hyderabad, Telangana 500090, India";
 export const GLOBAL_SITE_URL = "https://tools.trenith.com";
 export const INDIA_SITE_URL = "https://tools.trenith.in";
 export const DEFAULT_SITE_URL = GLOBAL_SITE_URL;
@@ -29,4 +28,4 @@ export const trenithContactUrl =
   "https://www.trenith.com/contact?utm_source=trenith_tools&utm_medium=product&utm_campaign=free_tools";
 
 export const baseDescription =
-  "Free private file tools for audio, video, PDF, images and metadata, plus BYOK AI workflows from Trenith Technologies. No subscription required.";
+  "Free private file tools for audio, video, PDF, images and metadata, BYOK AI, and Watch Together rooms with synchronized OTT playback, voice and video from Trenith Technologies.";

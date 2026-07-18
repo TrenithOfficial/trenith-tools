@@ -4,6 +4,7 @@ export const runtime = "edge";
 
 export function GET() {
   const items = [
+    { title: "Watch Together complete beta", date: "Sat, 18 Jul 2026 20:00:00 GMT", description: "Free synchronized rooms for authorized OTT websites with encrypted chat, reactions, live peer-to-peer camera and microphone, plus a least-privilege Chrome, Edge and Firefox companion." },
     { title: "Readability, real logo and all-device polish", date: "Sat, 18 Jul 2026 16:00:00 GMT", description: "Larger, more readable type site-wide with a 12px floor, the real Trenith shield restored as favicon and brand mark, reliable vector icons, a feedback button that always delivers, and a fixed navigation gap on medium screens." },
     { title: "Feedback everywhere, search-intent pages and security hardening", date: "Sat, 18 Jul 2026 12:00:00 GMT", description: "A floating feedback button on every page, search-intent titles for all 44 tools, zero known production dependency vulnerabilities, header-injection hardening and API burst limits." },
     { title: "Any-key AI Studio, free SEO tools and answer-engine upgrade", date: "Sat, 18 Jul 2026 08:00:00 GMT", description: "Every AI workflow now runs with any connected key with clear provider recommendations, browser-voice speech works with no key, vision keys read scans, and free on-device SERP preview and keyword density tools join the directory." },

@@ -1,10 +1,12 @@
 # Trenith Tools — factual reference
 
-Trenith Tools is a free global utility platform operated by Trenith Technologies Private Limited, CIN U62099TS2026PTC216554, registered at Plot No. 272, Pragatinagar, Hyderabad, Telangana 500090, India.
+Trenith Tools is a free global utility platform operated by Trenith Technologies Private Limited, CIN U62099TS2026PTC216554, registered in India.
 
 The global hostname is https://tools.trenith.com and the India-focused hostname is https://tools.trenith.in. Each deployment should use a self-referencing canonical and reciprocal en / en-IN hreflang links.
 
 The platform contains three kinds of workflow. Device tools use browser APIs or locally loaded WebAssembly and do not intentionally send selected source files to Trenith. Public Source tools send a user-entered public URL to a Trenith route for the requested scan or retrieval. BYOK tools send user-initiated requests to the provider the user connects; provider terms and billing apply.
+
+Trenith Watch Together is a separate free real-time feature for authorized OTT web playback. Every participant opens the title through their own provider account. A Manifest V3 browser companion synchronizes HTML5 play, pause, seek and playback rate; it does not screen-capture, download, decrypt or retransmit the title. Launch adapters cover YouTube, Netflix, Prime Video and JioHotstar, while other listed providers use an honestly labeled generic HTML5 beta. Native streaming mobile and TV apps are not controlled. Room chat, reactions, playback state and WebRTC negotiation are AES-GCM encrypted in the browser and expire from signaling storage; temporary display names, roles, token hashes and connection timestamps remain operational metadata. Optional camera/microphone media uses WebRTC and is not recorded by Trenith. Rooms expire after six hours, support up to 25 synchronized participants and limit live media to six.
 
 The metadata remover accepts files and folders, inventories recognized metadata, removes supported fields, rescans the output and offers individual or ZIP downloads. Cleaning is routed per format: the embedded ExifTool engine rewrites images, camera formats and MP4-family media; a dedicated document rewriter strips PDF information dictionaries and XMP; Word, Excel and PowerPoint document properties are scrubbed directly; and MP3, FLAC, Ogg, Opus, WAV, AIFF and WebM audio is rewritten as a lossless FFmpeg stream copy with metadata and chapters dropped. It does not promise removal of visible content, steganography, proprietary databases or every application-specific trace.
 

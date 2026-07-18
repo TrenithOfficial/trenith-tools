@@ -1,6 +1,6 @@
 # Trenith Tools
 
-A free, light-first, device-focused workspace for file privacy, media, PDFs, images, music utilities and BYOK AI workflows.
+A free, light-first platform for file privacy, media, PDFs, images, music utilities, BYOK AI and synchronized Watch Together rooms.
 
 ## Working tools
 
@@ -14,7 +14,7 @@ A free, light-first, device-focused workspace for file privacy, media, PDFs, ima
 - PDF merge, split-to-ZIP, page extraction, rotation, page numbers, watermarking and structural optimization
 - JPG/PNG to PDF
 - Image resize, compression and JPG/PNG/WebP conversion
-- Searchable privacy, audio, video, PDF, image, music, SEO and AI directory with 44 dedicated tool pages
+- Searchable privacy, audio, video, PDF, image, music, SEO, Developer and AI directory with 48 dedicated tool pages
 - Free on-device SEO tools: SERP snippet preview with length checks and a keyword density, readability and question analyzer
 - AI Studio runs every workflow with any connected key — text models produce structured plans for media jobs, browser voices speak text with no key at all, and vision-capable keys read text from scans
 - Free BYOK Connections Vault and AI Studio for OpenAI, Anthropic, Gemini, ElevenLabs, OpenRouter and compatible endpoints
@@ -22,6 +22,9 @@ A free, light-first, device-focused workspace for file privacy, media, PDFs, ima
 - Consent-gated Vercel/Google analytics and marketing measurement with Global Privacy Control support
 - Global and India canonicals/hreflang, structured data, localized sitemaps, robots, web manifest, guides, capability status, changelog/RSS, a public tool catalog API, `llms.txt` and `llms-full.txt`
 - Global privacy, terms, cookie, privacy choices, security, subprocessors, copyright and accessibility disclosures
+- Watch Together rooms for authorized OTT websites with encrypted playback signals, chat, reactions and temporary membership
+- Optional peer-to-peer camera and microphone for up to 6 people, and playback synchronization for up to 25
+- Cross-browser Manifest V3 companion for Chrome, Edge and Firefox with optional per-site access, no screen capture and no remote code
 
 Core file tools process source files in the browser. There is no arbitrary application-level file-count limit; usable capacity depends on the device, browser memory and browser codec support.
 
@@ -42,6 +45,7 @@ Production validation:
 npm test
 npm run lint
 npm run build:vercel
+npm run zip:extension
 ```
 
 Vercel reads `vercel.json` and runs the native Next.js build so the expected `.next` output is generated.
@@ -65,10 +69,15 @@ Optional runtime configuration:
 | `RESEND_API_KEY` | Resend key used to email feedback submissions when no webhook is set |
 | `FEEDBACK_EMAIL_TO` | Feedback recipient address (defaults to info@trenith.com) |
 | `FEEDBACK_EMAIL_FROM` | Verified Resend sender for feedback email delivery |
+| `WATCH_SIGNAL_ORIGIN` | Vercel proxy target for the Cloudflare-hosted Watch Together signaling API |
+| `TURN_KEY_ID` | Optional Cloudflare Realtime TURN key identifier for restrictive networks |
+| `TURN_KEY_API_TOKEN` | Optional scoped token used server-side to mint short-lived TURN credentials |
 
 Without a feedback delivery variable the widget still works: it offers the visitor a prefilled direct email instead of silently dropping the report.
 
 See [`docs/SEARCH-SETUP.md`](docs/SEARCH-SETUP.md) for the domain, Search Console, Bing, IndexNow and analytics launch sequence. See [`docs/OFFSITE-DISCOVERY.md`](docs/OFFSITE-DISCOVERY.md) for the compliant off-site SEO/AEO/GEO/AIO distribution plan.
+
+See [`docs/WATCH-TOGETHER-ARCHITECTURE.md`](docs/WATCH-TOGETHER-ARCHITECTURE.md) for the complete room protocol, data model, user flows, provider-adapter strategy, WebRTC design, observability, CI/CD and phased rollout.
 
 Public discovery surfaces: [`/status`](https://tools.trenith.com/status), [`/changelog`](https://tools.trenith.com/changelog), [`/feed.xml`](https://tools.trenith.com/feed.xml), and [`/api/tools`](https://tools.trenith.com/api/tools).
 
@@ -76,10 +85,10 @@ Public discovery surfaces: [`/status`](https://tools.trenith.com/status), [`/cha
 
 Only process or download media you own, have permission to use, or are otherwise authorized to access. The public-link scanner does not bypass authentication, DRM or platform access controls.
 
+Watch Together never retransmits an OTT title. Every participant uses their own lawful provider account. Playback adapters operate only after a participant grants the extension access to the selected streaming origin.
+
 ## Ownership
 
 Built by **Trenith Technologies Private Limited** (CIN U62099TS2026PTC216554).
-
-Co-authored by **Sai Phanindra Manikanta Yalamanchili**.
 
 Visit [trenith.com](https://trenith.com).

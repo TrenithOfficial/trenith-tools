@@ -19,3 +19,12 @@ jobs:
       - run: npm run lint
       - run: npm test
       - run: npm run build:vercel
+      - run: npm run zip:extension
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push'
+        with:
+          name: trenith-watch-together-extensions
+          path: |
+            .output/*.zip
+          if-no-files-found: error
+          retention-days: 14

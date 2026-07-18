@@ -3,7 +3,7 @@ import { JsonLd } from "../components/json-ld";
 import { OrbitVisual } from "../components/orbit-visual";
 import { ToolCard } from "../components/tool-card";
 import { quickTools, tools } from "../lib/catalog";
-import { COMPANY_ADDRESS, COMPANY_CIN, siteUrl, trenithContactUrl } from "../lib/site";
+import { COMPANY_CIN, siteUrl, trenithContactUrl } from "../lib/site";
 
 const faqs = [
   ["What does processed on your device mean?", "Audio, video, PDF and image source files are handled by browser APIs on your computer or phone. Trenith does not receive or store those input files for these tools."],
@@ -74,6 +74,11 @@ export default function Home() {
         <div className="page-frame"><div><span>◇</span><strong>Private processing</strong><small>Device tools keep files in your browser</small></div><div><span>○</span><strong>Zero subscriptions</strong><small>The Trenith interface is completely free</small></div><div><span>⌁</span><strong>Your provider accounts</strong><small>Bring your own AI keys when needed</small></div></div>
       </section>
 
+      <section className="home-watch-feature page-frame">
+        <div><span className="section-kicker">NEW · WATCH TOGETHER</span><h2>Movie night now has a room of its own.</h2><p>Sync Netflix, Prime Video, YouTube, JioHotstar and compatible OTT websites while friends talk through encrypted chat, live microphone and camera. Everyone watches from their own authorized account.</p><div className="hero-actions"><Link className="primary-action" href="/watch-together">Create a free room <span>→</span></Link><Link className="text-action" href="/watch-together/supported">Check compatibility</Link></div></div>
+        <div className="home-watch-orbit" aria-hidden="true"><i /><i /><i /><strong>▶</strong><span>SYNC · CHAT · VIDEO · VOICE</span></div>
+      </section>
+
       <section className="answer-section page-frame">
         <div className="answer-copy"><span className="section-kicker">CLEAR BY DESIGN</span><h2>Know exactly where every job runs.</h2><p>Trenith labels each workflow by how it operates. There are no decorative tool cards and no surprise paywall after you click.</p></div>
         <div className="answer-grid">
@@ -104,7 +109,7 @@ export default function Home() {
         <Link className="primary-action" href="/connections">Open Connections Vault <span>→</span></Link>
       </section>
 
-      <section className="service-cta page-frame"><div><span className="section-kicker">FROM FREE TOOL TO BUSINESS SYSTEM</span><h2>When a browser workflow becomes critical, Trenith can build the infrastructure.</h2><p>We design SaaS backends, AI integrations, cloud platforms, CRM workflows and automation for organizations in India and worldwide. {COMPANY_ADDRESS}. CIN {COMPANY_CIN}.</p></div><a className="primary-action" href={trenithContactUrl} target="_blank" rel="noreferrer">Talk to Trenith <span>↗</span></a></section>
+      <section className="service-cta page-frame"><div><span className="section-kicker">FROM FREE TOOL TO BUSINESS SYSTEM</span><h2>When a browser workflow becomes critical, Trenith can build the infrastructure.</h2><p>We design SaaS backends, AI integrations, cloud platforms, CRM workflows and automation for organizations in India and worldwide. Built by Trenith Technologies Private Limited · CIN {COMPANY_CIN}.</p></div><a className="primary-action" href={trenithContactUrl} target="_blank" rel="noreferrer">Talk to Trenith <span>↗</span></a></section>
 
       <section className="faq-section page-frame">
         <div><span className="section-kicker">DIRECT ANSWERS</span><h2>Frequently asked questions</h2><p>Plain-language answers for people, search engines and answer engines.</p></div>

@@ -21,7 +21,7 @@ Use the same legal identity everywhere:
 - Hyderabad, Telangana, India
 - `https://www.trenith.com` and the two tool hostnames
 
-Describe the product factually: free browser file utilities, public-source audio discovery, and provider-dependent BYOK workflows. Never claim universal format compatibility, unlimited device capacity, guaranteed privacy, guaranteed rankings or bundled AI models.
+Describe the product factually: free browser file utilities, public-source audio discovery, provider-dependent BYOK workflows, and Watch Together rooms that synchronize authorized OTT web playback with optional camera/voice. Never claim universal format/provider compatibility, access to native TV/mobile apps, retransmission of OTT content, unlimited device capacity, guaranteed privacy, guaranteed rankings or bundled AI models.
 
 ## Earned distribution targets
 
@@ -30,6 +30,7 @@ Describe the product factually: free browser file utilities, public-source audio
 - Editorial outreach: pitch privacy, audio, document and creator-resource editors with one specific useful tool, a reproducible test file and the public capability page.
 - Community answers: respond only where the tool directly solves the question; disclose Trenith affiliation and include the solution even if the link is removed.
 - Partnerships: offer embeddable links to music schools, privacy educators, creator communities and small-business resource pages. Ask for editorial review, not anchor text.
+- Watch Together launch: publish the extension source/release notes and provider compatibility matrix; pitch independent browser-extension, remote-friendship and streaming-accessibility editors with the exact privacy/DRM boundaries. Seek Chrome Web Store and Mozilla AMO listings only after signed builds pass provider testing. Do not put competitor trademarks in an extension name, imply provider endorsement, manufacture “alternative” comparison pages, or solicit reviews before people have used the release.
 - Local presence: connect the free platform to Trenith’s existing Google Business Profile or other verified business profiles; do not create separate fake locations for the tools.
 
 ## Monthly evidence loop
@@ -41,5 +42,5 @@ Track consented visits, successful tool starts, successful outputs, result downl
 - `/sitemap.xml`, `/robots.txt`, `/llms.txt`, `/llms-full.txt`
 - reciprocal global/India hreflang and canonical metadata
 - SoftwareApplication, HowTo, FAQ, Organization, WebSite, ItemList and breadcrumb structured data
-- `/status`, `/changelog`, `/feed.xml`, `/api/tools`
+- `/status`, `/changelog`, `/feed.xml`, `/api/tools`, `/watch-together`, `/watch-together/supported`
 - `docs/SEARCH-SETUP.md` for verification and submission
