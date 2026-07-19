@@ -1,0 +1,25 @@
+# Standalone Cloudflare Worker for the Watch Together signaling API.
+#
+# Kept in its own config file (passed explicitly with `-c wrangler.watch.toml`)
+# so the vite/vinext toolchain — which supplies its own bindings inline in
+# vite.config.ts — is completely unaffected.
+#
+# Deploy flow (see the "Watch Together signaling" section of README.md):
+#   1. wrangler login
+#   2. npm run watch:d1:create      -> copy the printed database_id below
+#   3. npm run watch:deploy
+#   4. set WATCH_SIGNAL_ORIGIN on Vercel to the deployed workers.dev URL
+name = "trenith-watch-signal"
+main = "worker/watch-standalone.ts"
+compatibility_date = "2026-05-15"
+compatibility_flags = ["nodejs_compat"]
+
+# The room database. handleWatchApi self-provisions the schema on first request,
+# so a newly created database needs no manual migration step.
+[[d1_databases]]
+binding = "DB"
+database_name = "trenith-watch"
+database_id = "REPLACE_WITH_ID_FROM_watch:d1:create"
+
+[observability]
+enabled = true

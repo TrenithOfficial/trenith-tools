@@ -26,6 +26,9 @@
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .wxt --ignore-pattern public/ffmpeg",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "watch:d1:create": "wrangler d1 create trenith-watch",
+    "watch:deploy": "wrangler deploy -c wrangler.watch.toml",
+    "watch:tail": "wrangler tail -c wrangler.watch.toml",
     "search:indexnow": "node scripts/submit-indexnow.mjs",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },

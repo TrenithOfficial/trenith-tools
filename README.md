@@ -73,6 +73,31 @@ Optional runtime configuration:
 | `TURN_KEY_ID` | Optional Cloudflare Realtime TURN key identifier for restrictive networks |
 | `TURN_KEY_API_TOKEN` | Optional scoped token used server-side to mint short-lived TURN credentials |
 
+## Watch Together signaling backend
+
+Watch Together needs one small backend that owns the room database. The site on
+Vercel proxies `/api/watch/*` to it via `WATCH_SIGNAL_ORIGIN`; there is no
+fallback host, so the feature returns 503 until this is deployed and configured.
+
+Deploy it as a standalone Cloudflare Worker (config: `wrangler.watch.toml`):
+
+```bash
+wrangler login                 # one-time, opens your browser
+npm run watch:d1:create        # prints a database_id
+# paste that id into wrangler.watch.toml -> [[d1_databases]] database_id
+npm run watch:deploy           # prints the https://<name>.<subdomain>.workers.dev URL
+```
+
+The room schema is self-provisioning — the worker creates its tables and indexes
+on the first request, so no migration step is required for a new database. The
+SQL in `drizzle/` remains the reference definition.
+
+Then set `WATCH_SIGNAL_ORIGIN` to the deployed worker URL in the Vercel project
+and redeploy. Verify with `curl "$WATCH_SIGNAL_ORIGIN/api/watch/health"`, which
+returns `{"status":"ok",...}`. Optional: `wrangler secret put TURN_KEY_ID` and
+`TURN_KEY_API_TOKEN` (via `-c wrangler.watch.toml`) to enable TURN relay, and
+`npm run watch:tail` to stream worker logs.
+
 Without a feedback delivery variable the widget still works: it offers the visitor a prefilled direct email instead of silently dropping the report.
 
 See [`docs/SEARCH-SETUP.md`](docs/SEARCH-SETUP.md) for the domain, Search Console, Bing, IndexNow and analytics launch sequence. See [`docs/OFFSITE-DISCOVERY.md`](docs/OFFSITE-DISCOVERY.md) for the compliant off-site SEO/AEO/GEO/AIO distribution plan.
