@@ -8,7 +8,7 @@ import { handleWatchApi, type WatchApiEnv } from "./watch-api";
 //
 // The schema is self-provisioning: handleWatchApi runs ensureSchema() on the
 // first request, so a freshly created D1 database needs no manual migration.
-export default {
+const worker = {
   async fetch(request: Request, env: WatchApiEnv): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (pathname === "/api/watch" || pathname.startsWith("/api/watch/")) {
@@ -17,3 +17,5 @@ export default {
     return new Response("Not found", { status: 404, headers: { "cache-control": "no-store" } });
   },
 };
+
+export default worker;
