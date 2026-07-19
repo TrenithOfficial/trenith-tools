@@ -9,7 +9,9 @@ export function ToolsBrowser() {
   const params = useSearchParams();
   const initialCategory = params.get("category");
   const [category, setCategory] = useState(categories.includes(initialCategory as typeof categories[number]) ? initialCategory || "All" : "All");
-  const [query, setQuery] = useState("");
+  // Seed the search from ?q= so the Sitelinks Searchbox target declared in the
+  // WebSite SearchAction (and any shared /tools?q= link) actually filters.
+  const [query, setQuery] = useState(params.get("q") ?? "");
 
   const visible = useMemo(() => tools.filter((tool) => {
     const categoryMatch = category === "All" || tool.category === category;

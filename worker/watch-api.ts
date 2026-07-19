@@ -63,6 +63,8 @@ const schemaStatements = [
     active INTEGER DEFAULT 1 NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS watch_participants_room_idx ON watch_participants (room_id)`,
+  `CREATE INDEX IF NOT EXISTS watch_participants_seen_idx ON watch_participants (last_seen_at)`,
+  `CREATE INDEX IF NOT EXISTS watch_rooms_expires_idx ON watch_rooms (expires_at)`,
   `CREATE TABLE IF NOT EXISTS watch_events (
     seq INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
     room_id TEXT NOT NULL,
@@ -90,7 +92,7 @@ function corsOrigin(request: Request): string {
   if (
     origin === "https://tools.trenith.com" ||
     origin === "https://tools.trenith.in" ||
-    origin.endsWith(".vortexc.chatgpt.site") ||
+    origin === "https://trenith-tools.vercel.app" ||
     origin.startsWith("chrome-extension://") ||
     origin.startsWith("moz-extension://") ||
     /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
@@ -98,17 +100,20 @@ function corsOrigin(request: Request): string {
   return "https://tools.trenith.com";
 }
 
+function corsHeaders(request: Request): Record<string, string> {
+  return {
+    "access-control-allow-origin": corsOrigin(request),
+    "access-control-allow-headers": "authorization, content-type",
+    "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
+    "cache-control": "no-store",
+    vary: "Origin",
+  };
+}
+
 function json(request: Request, body: unknown, status = 200, extra: HeadersInit = {}): Response {
   return Response.json(body, {
     status,
-    headers: {
-      "access-control-allow-origin": corsOrigin(request),
-      "access-control-allow-headers": "authorization, content-type",
-      "access-control-allow-methods": "GET, POST, DELETE, OPTIONS",
-      "cache-control": "no-store",
-      vary: "Origin",
-      ...extra,
-    },
+    headers: { ...corsHeaders(request), ...extra },
   });
 }
 
@@ -168,11 +173,19 @@ async function activeParticipants(db: WatchD1, roomId: string, now: number) {
 }
 
 async function cleanExpired(db: WatchD1, now: number): Promise<void> {
+  // Physically purge rooms (and their participants' display names) once they are
+  // well past expiry, so retention matches the privacy notice's "removed" claim
+  // and D1 does not grow unbounded. A grace window keeps just-expired rooms
+  // briefly for late reconnects. The UPDATEs are scoped to only rows that
+  // actually change, so a growing backlog is not re-written every 60s.
+  const purgeBefore = now - 60 * 60 * 1000;
   await db.batch([
     db.prepare("DELETE FROM watch_events WHERE expires_at < ?").bind(now),
     db.prepare("DELETE FROM watch_rate_limits WHERE reset_at < ?").bind(now),
-    db.prepare("UPDATE watch_participants SET active = 0 WHERE last_seen_at < ?").bind(now - 90_000),
-    db.prepare("UPDATE watch_rooms SET ended_at = COALESCE(ended_at, ?) WHERE expires_at < ?").bind(now, now),
+    db.prepare("UPDATE watch_participants SET active = 0 WHERE active = 1 AND last_seen_at < ?").bind(now - 90_000),
+    db.prepare("UPDATE watch_rooms SET ended_at = COALESCE(ended_at, ?) WHERE ended_at IS NULL AND expires_at < ?").bind(now, now),
+    db.prepare("DELETE FROM watch_participants WHERE room_id IN (SELECT id FROM watch_rooms WHERE expires_at < ?)").bind(purgeBefore),
+    db.prepare("DELETE FROM watch_rooms WHERE expires_at < ?").bind(purgeBefore),
   ]);
 }
 
@@ -345,7 +358,9 @@ async function iceServers(request: Request, db: WatchD1, env: WatchApiEnv, roomI
 }
 
 export async function handleWatchApi(request: Request, env: WatchApiEnv): Promise<Response> {
-  if (request.method === "OPTIONS") return json(request, null, 204);
+  // A 204 response must have no body; Response.json() always writes one and
+  // throws. Return a bodyless preflight with the CORS headers directly.
+  if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsHeaders(request), "access-control-max-age": "86400" } });
   if (!env.DB) return json(request, { error: "Watch Together room storage is not configured." }, 503);
   try {
     await ensureSchema(env.DB);
@@ -369,8 +384,11 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv): Promis
     if (action === "ice" && request.method === "GET") return await rateLimit(request, env.DB, `ice:${roomId}`, 30, 10 * 60 * 1000) || iceServers(request, env.DB, env, roomId);
     return json(request, { error: "Method not allowed." }, 405, { allow: "GET, POST, DELETE, OPTIONS" });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "The room request failed.";
-    const safeMessage = /JSON|invitation|supported|room|event/i.test(message) ? message : "The room service could not complete the request.";
+    // Only surface the body-parsing messages we deliberately raise in readBody;
+    // every other thrown error (D1/internal) returns a generic message so
+    // storage internals are never leaked to the client.
+    const message = error instanceof Error ? error.message : "";
+    const safeMessage = /^A JSON /.test(message) ? message : "The room service could not complete the request.";
     return json(request, { error: safeMessage }, 400);
   }
 }

@@ -6,7 +6,6 @@ const TOOL_URLS = [
   "https://tools.trenith.com/*",
   "https://tools.trenith.in/*",
   "https://trenith-tools.vercel.app/*",
-  "https://audio-downloader.vortexc.chatgpt.site/*",
   "http://localhost/*",
   "http://127.0.0.1/*",
 ];
@@ -57,7 +56,7 @@ export default defineBackground(() => {
       if (!tab?.id || !tab.url) return { installed: true, connected: false, error: "Open the OTT playback tab, then try again." } satisfies ConnectionStatus;
       const url = new URL(tab.url);
       if (!/^https?:$/.test(url.protocol)) return { installed: true, connected: false, error: "This browser page cannot be connected." } satisfies ConnectionStatus;
-      if (/trenith\.(com|in)$/.test(url.hostname) || url.hostname.endsWith("chatgpt.site") || url.hostname === "trenith-tools.vercel.app") return { installed: true, connected: false, error: "Switch to the OTT playback tab before connecting." } satisfies ConnectionStatus;
+      if (/trenith\.(com|in)$/.test(url.hostname) || url.hostname === "trenith-tools.vercel.app" || url.hostname === "localhost" || url.hostname === "127.0.0.1") return { installed: true, connected: false, error: "Switch to the OTT playback tab before connecting." } satisfies ConnectionStatus;
       const originPattern = `${url.origin}/*`;
       const granted = await browser.permissions.request({ origins: [originPattern] });
       if (!granted) return { installed: true, connected: false, error: "Site access was not granted. Trenith cannot control this player without it." } satisfies ConnectionStatus;

@@ -57,7 +57,11 @@ function applyGoogleConsent(consent: Consent) {
 function loadGoogleTag(consent: Consent) {
   const measurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID?.trim();
   const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID?.trim();
-  const tagId = measurementId || (consent.marketing ? adsId : "");
+  // Fetch the Google tag only once the visitor has granted the matching consent —
+  // analytics for GA, marketing for Ads. "Reject non-essential" loads no script.
+  const tagId = (measurementId && consent.analytics) ? measurementId
+    : (adsId && consent.marketing) ? adsId
+    : "";
   if (!tagId || document.querySelector("script[data-trenith-google-tag]")) return;
   const target = window as ConsentWindow;
   target.dataLayer = target.dataLayer || [];

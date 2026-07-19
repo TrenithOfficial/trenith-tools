@@ -1,6 +1,6 @@
 "use client";
 
-import { assertEngineCapacity, getFfmpeg } from "./audio-transcode.ts";
+import { assertEngineCapacity, getFfmpeg, isControlledEngineError, resetFfmpeg } from "./audio-transcode.ts";
 
 export type CleanerRoute = "exiftool" | "pdf" | "ooxml" | "media";
 export type WasmFetch = (...args: unknown[]) => Promise<Response>;
@@ -116,6 +116,9 @@ export async function stripMediaMetadata(file: File, progress?: (message: string
     const copy = new Uint8Array(data.byteLength);
     copy.set(data);
     return new Blob([copy.buffer], { type: file.type || "application/octet-stream" });
+  } catch (error) {
+    if (!isControlledEngineError(error)) resetFfmpeg();
+    throw error;
   } finally {
     await Promise.allSettled([ffmpeg.deleteFile(inputName), ffmpeg.deleteFile(outputName)]);
   }

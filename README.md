@@ -69,7 +69,7 @@ Optional runtime configuration:
 | `RESEND_API_KEY` | Resend key used to email feedback submissions when no webhook is set |
 | `FEEDBACK_EMAIL_TO` | Feedback recipient address (defaults to info@trenith.com) |
 | `FEEDBACK_EMAIL_FROM` | Verified Resend sender for feedback email delivery |
-| `WATCH_SIGNAL_ORIGIN` | Vercel proxy target for the Cloudflare-hosted Watch Together signaling API |
+| `WATCH_SIGNAL_ORIGIN` | Required for Watch Together — the Cloudflare signaling origin the Vercel proxy forwards to. There is no fallback host: the proxy returns 503 until this is set. |
 | `TURN_KEY_ID` | Optional Cloudflare Realtime TURN key identifier for restrictive networks |
 | `TURN_KEY_API_TOKEN` | Optional scoped token used server-side to mint short-lived TURN credentials |
 

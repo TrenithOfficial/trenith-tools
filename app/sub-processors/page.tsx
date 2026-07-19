@@ -10,6 +10,7 @@ const processors = [
   ["Google Analytics / Google Ads", "Consent-gated analytics and campaign conversion measurement", "Global infrastructure"],
   ["Google Workspace / Gmail", "Privacy, legal, grievance and support communications", "Global infrastructure"],
   ["Cloudflare", "Protective network services; Watch Together room signaling/database and optional WebRTC STUN/TURN relay", "Global infrastructure"],
+  ["Resend", "Transactional email delivery of feedback-widget submissions when email delivery is configured", "United States / global infrastructure"],
 ];
 
 export default function SubprocessorsPage() { return <LegalPage title="A limited provider chain." summary="Current as of 18 July 2026">

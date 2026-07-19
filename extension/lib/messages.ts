@@ -39,7 +39,6 @@ export const toolsMatches = [
   "https://tools.trenith.com/*",
   "https://tools.trenith.in/*",
   "https://trenith-tools.vercel.app/*",
-  "https://audio-downloader.vortexc.chatgpt.site/*",
   "http://localhost/*",
   "http://127.0.0.1/*",
 ];

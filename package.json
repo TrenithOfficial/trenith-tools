@@ -24,6 +24,8 @@
     "test:watch": "node --test tests/watch-*.test.mjs",
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .wxt --ignore-pattern public/ffmpeg",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "audit:prod": "npm audit --omit=dev --audit-level=high",
     "search:indexnow": "node scripts/submit-indexnow.mjs",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },

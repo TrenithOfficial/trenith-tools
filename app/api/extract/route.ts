@@ -116,7 +116,25 @@ export async function POST(request: NextRequest) {
 
     const announcedSize = Number(response.headers.get("content-length") || 0);
     if (announcedSize > MAX_HTML_BYTES) throw new Error("This webpage is too large to scan safely.");
-    const html = (await response.text()).slice(0, MAX_HTML_BYTES);
+    // Stream the body and stop once the cap is reached, rather than buffering the
+    // whole (possibly unbounded, Content-Length-less) response into memory first.
+    let html = "";
+    if (response.body) {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let received = 0;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        html += decoder.decode(value, { stream: true });
+        if (received >= MAX_HTML_BYTES) { await reader.cancel().catch(() => undefined); break; }
+      }
+      html += decoder.decode();
+      html = html.slice(0, MAX_HTML_BYTES);
+    } else {
+      html = (await response.text()).slice(0, MAX_HTML_BYTES);
+    }
     const base = validatePublicUrl(response.url || target.href);
     const candidates = new Map<string, URL>();
 

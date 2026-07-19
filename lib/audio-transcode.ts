@@ -64,6 +64,23 @@ export async function getFfmpeg(progress?: (percent: number, message: string) =>
   return ffmpegPromise;
 }
 
+// A worker abort/OOM leaves the cached singleton pointing at a dead worker, which
+// would silently break every later conversion until a full page reload. Reset the
+// cache (and terminate the corpse in the background) so the next getFfmpeg() builds
+// a fresh engine. Not awaited: a crashed worker may never resolve terminate().
+export function resetFfmpeg() {
+  const current = ffmpegPromise;
+  ffmpegPromise = null;
+  if (current) void current.then((ffmpeg) => { try { ffmpeg.terminate(); } catch { /* already gone */ } }).catch(() => undefined);
+}
+
+// True for our own controlled failures (bad input / nonzero exit / empty output),
+// where the engine is still healthy and must NOT be torn down. Anything else is
+// treated as a worker crash and triggers a reset.
+export function isControlledEngineError(error: unknown): boolean {
+  return error instanceof Error && /could not encode|not readable|empty audio|did not produce|too large|could not be rewritten|no cleaned output/i.test(error.message);
+}
+
 // The engine holds the whole source plus its output inside 32-bit WebAssembly
 // memory, so very large files can never fit. Fail fast with an honest message
 // instead of downloading the engine and then dying with a generic error.
@@ -108,6 +125,9 @@ export async function transcodeAudio(
       filename: `${safeStem(file.name)}.${profile.extension}`,
       format: profile,
     };
+  } catch (error) {
+    if (!isControlledEngineError(error)) resetFfmpeg();
+    throw error;
   } finally {
     ffmpeg.off("progress", onProgress);
     await Promise.allSettled([ffmpeg.deleteFile(inputName), ffmpeg.deleteFile(outputName)]);
@@ -130,6 +150,9 @@ export async function decodeAudioWithFallback(file: File, progress?: (message: s
     const copy = new Uint8Array(data.byteLength);
     copy.set(data);
     return copy.buffer;
+  } catch (error) {
+    if (!isControlledEngineError(error)) resetFfmpeg();
+    throw error;
   } finally {
     await Promise.allSettled([ffmpeg.deleteFile(inputName), ffmpeg.deleteFile(outputName)]);
   }
