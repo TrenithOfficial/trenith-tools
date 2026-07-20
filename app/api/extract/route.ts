@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { allowRequest, clientKey } from "../../../lib/rate-limit";
 
-export const runtime = "edge";
+// Node/Fluid runtime rather than Edge so the streamed, size-capped page scan has
+// a configurable duration budget for slow sources.
+export const runtime = "nodejs";
+export const maxDuration = 60;
 
 function safeDecode(value: string) {
   try { return decodeURIComponent(value); } catch { return value; }

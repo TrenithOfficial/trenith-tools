@@ -26,11 +26,18 @@ async function proxy(request: Request, context: { params: Promise<{ path: string
   }
   headers.set("origin", incoming.origin);
   // Forward the real client IP so the signaling worker can attribute per-IP
-  // abuse limits to the caller rather than to this proxy's address.
+  // abuse limits to the caller rather than to this proxy's address. The worker
+  // trusts the asserted IP only when the shared secret is presented, which stops
+  // a direct caller from spoofing it.
   const clientIp = request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim()
     || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
     || request.headers.get("x-real-ip");
   if (clientIp) headers.set("x-forwarded-for", clientIp);
+  const proxySecret = process.env.WATCH_PROXY_SECRET;
+  if (proxySecret && clientIp) {
+    headers.set("x-trenith-client-ip", clientIp);
+    headers.set("x-trenith-proxy-auth", proxySecret);
+  }
   const response = await fetch(target, {
     method: request.method,
     headers,

@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { allowRequest, clientKey } from "../../../lib/rate-limit";
 
-export const runtime = "edge";
+// Node/Fluid runtime rather than Edge: this proxy can stream up to a 2 GB file,
+// which outgrows Edge's streaming limits, and maxDuration gives a slow source
+// room to complete.
+export const runtime = "nodejs";
+export const maxDuration = 300;
 
 function safeDecode(value: string) {
   try { return decodeURIComponent(value); } catch { return value; }

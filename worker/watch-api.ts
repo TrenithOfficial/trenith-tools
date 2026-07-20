@@ -37,6 +37,7 @@ export type WatchApiEnv = {
   RESEND_API_KEY?: string;              // optional: email the access key / confirmation
   WATCH_ACCESS_EMAIL_FROM?: string;     // verified Resend sender
   WATCH_ACCESS_EMAIL_TO?: string;       // where new pending requests are notified
+  WATCH_PROXY_SECRET?: string;          // shared with the Vercel proxy so it can assert the real client IP
 };
 
 type ParticipantRow = {
@@ -210,8 +211,21 @@ async function cleanExpired(db: WatchD1, now: number): Promise<void> {
   ]);
 }
 
-async function rateLimit(request: Request, db: WatchD1, scope: string, limit: number, windowMs: number): Promise<Response | null> {
-  const address = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || `unknown:${request.headers.get("user-agent") || "client"}`;
+// The signaling worker can be reached directly (extension) or through the Vercel
+// proxy. On the direct path Cloudflare sets cf-connecting-ip; on the proxied path
+// that header is the proxy's own address, so the proxy asserts the real client IP
+// in x-trenith-client-ip, trusted only when it presents the shared secret.
+function trustedClientIp(request: Request, env: WatchApiEnv): string {
+  if (env.WATCH_PROXY_SECRET && request.headers.get("x-trenith-proxy-auth") === env.WATCH_PROXY_SECRET) {
+    const asserted = request.headers.get("x-trenith-client-ip")?.trim();
+    if (asserted) return asserted;
+  }
+  return request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || `unknown:${request.headers.get("user-agent") || "client"}`;
+}
+
+async function rateLimit(request: Request, env: WatchApiEnv, scope: string, limit: number, windowMs: number): Promise<Response | null> {
+  const db = env.DB!;
+  const address = trustedClientIp(request, env);
   const key = await sha256(`${scope}:${address}`);
   const now = Date.now();
   const resetAt = now + windowMs;
@@ -468,23 +482,23 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv): Promis
     }
     const path = new URL(request.url).pathname.replace(/^\/api\/watch\/?/, "");
     if (path === "health" && request.method === "GET") return json(request, { status: "ok", protocolVersion: WATCH_PROTOCOL_VERSION, serverTime: now });
-    if (path === "access" && request.method === "POST") return await rateLimit(request, env.DB, "access", 6, 60 * 60 * 1000) || await requestAccess(request, env.DB, env);
+    if (path === "access" && request.method === "POST") return await rateLimit(request, env, "access", 6, 60 * 60 * 1000) || await requestAccess(request, env.DB, env);
     if (path === "access/approve" && request.method === "POST") return await adminApprove(request, env.DB, env);
     // Every handler below is awaited. Returning a bare promise from inside this
     // try block would let a rejection settle after the block exits, escaping the
     // catch entirely and surfacing an uncaught worker exception (HTTP 500 with a
     // platform error page) instead of a clean JSON error.
-    if (path === "rooms" && request.method === "POST") return await rateLimit(request, env.DB, "create", 20, 60 * 60 * 1000) || await requireCreateAccess(request, env.DB) || await createRoom(request, env.DB);
+    if (path === "rooms" && request.method === "POST") return await rateLimit(request, env, "create", 20, 60 * 60 * 1000) || await requireCreateAccess(request, env.DB) || await createRoom(request, env.DB);
 
     const match = path.match(/^rooms\/([^/]+)(?:\/(events|leave|ice))?$/);
     if (!match || !isWatchRoomId(match[1])) return json(request, { error: "Watch Together route not found." }, 404);
     const [, roomId, action] = match;
-    if (!action && request.method === "POST") return await rateLimit(request, env.DB, `join:${roomId}`, 60, 10 * 60 * 1000) || await joinRoom(request, env.DB, roomId);
+    if (!action && request.method === "POST") return await rateLimit(request, env, `join:${roomId}`, 60, 10 * 60 * 1000) || await joinRoom(request, env.DB, roomId);
     if (!action && request.method === "DELETE") return await endRoom(request, env.DB, roomId);
-    if (action === "events" && request.method === "POST") return await rateLimit(request, env.DB, `event-write:${roomId}:${bearerToken(request)}`, 180, 60 * 1000) || await postEvent(request, env.DB, roomId);
+    if (action === "events" && request.method === "POST") return await rateLimit(request, env, `event-write:${roomId}:${bearerToken(request)}`, 180, 60 * 1000) || await postEvent(request, env.DB, roomId);
     if (action === "events" && request.method === "GET") return await getEvents(request, env.DB, roomId);
     if (action === "leave" && request.method === "POST") return await leaveRoom(request, env.DB, roomId);
-    if (action === "ice" && request.method === "GET") return await rateLimit(request, env.DB, `ice:${roomId}`, 30, 10 * 60 * 1000) || await iceServers(request, env.DB, env, roomId);
+    if (action === "ice" && request.method === "GET") return await rateLimit(request, env, `ice:${roomId}`, 30, 10 * 60 * 1000) || await iceServers(request, env.DB, env, roomId);
     return json(request, { error: "Method not allowed." }, 405, { allow: "GET, POST, DELETE, OPTIONS" });
   } catch (error) {
     // Only surface the body-parsing messages we deliberately raise in readBody;
