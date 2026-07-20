@@ -34,10 +34,41 @@ function validateAudioUrl(input: string) {
   return url;
 }
 
+// Enforce the size limit on the bytes actually streamed. A source can omit or
+// understate Content-Length, so trusting the header alone leaves the proxy
+// relaying an unbounded amount of data.
+function cappedStream(source: ReadableStream<Uint8Array>, limit: number): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  let sent = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { value, done } = await reader.read();
+      if (done) { controller.close(); return; }
+      sent += value.byteLength;
+      if (sent > limit) {
+        await reader.cancel().catch(() => undefined);
+        controller.error(new Error("The audio source exceeded the download proxy size limit."));
+        return;
+      }
+      controller.enqueue(value);
+    },
+    cancel(reason) { void reader.cancel(reason); },
+  });
+}
+
 async function fetchPublicAudio(initial: URL) {
   let current = initial;
   for (let redirects = 0; redirects <= 5; redirects += 1) {
-    const response = await fetch(current.href, { redirect: "manual", headers: { "User-Agent": "TrenithToolsAudioDownloader/1.0 (+https://trenith.com)" } });
+    // Bound the wait for response headers only. The timer is cleared as soon as
+    // they arrive so a large but healthy transfer is never cut off mid-body.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    let response: Response;
+    try {
+      response = await fetch(current.href, { redirect: "manual", signal: controller.signal, headers: { "User-Agent": "TrenithToolsAudioDownloader/1.0 (+https://trenith.com)" } });
+    } finally {
+      clearTimeout(timer);
+    }
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     const location = response.headers.get("location");
     if (!location) throw new Error("The audio source returned an invalid redirect.");
@@ -65,7 +96,7 @@ export async function GET(request: NextRequest) {
     // path can never inject additional response-header content.
     const filename = safeDecode(finalUrl.pathname.split("/").pop() || "audio.mp3").replace(/[\\/:*?\"<>|]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "");
 
-    return new NextResponse(response.body, {
+    return new NextResponse(cappedStream(response.body, MAX_PROXY_BYTES), {
       headers: {
         "Content-Type": response.headers.get("content-type") || "application/octet-stream",
         "Content-Disposition": `attachment; filename="${filename.slice(0, 180)}"`,
