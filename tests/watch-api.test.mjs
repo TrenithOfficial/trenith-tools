@@ -21,17 +21,20 @@ class TestD1 {
   async batch(statements) { const results = []; for (const statement of statements) results.push(await statement.run()); return results; }
 }
 
+const ADMIN_SECRET = "test-admin-secret-value";
 const environment = {
   DB: new TestD1(),
+  WATCH_ADMIN_SECRET: ADMIN_SECRET,
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
 };
 const context = { waitUntil() {}, passThroughOnException() {} };
 
-async function request(path, { method = "GET", token, body, accessKey } = {}) {
+async function request(path, { method = "GET", token, body, accessKey, admin } = {}) {
   const headers = { origin: "https://tools.trenith.com" };
   if (body) headers["content-type"] = "application/json";
   if (token) headers.authorization = `Bearer ${token}`;
   if (accessKey) headers["x-watch-access"] = accessKey;
+  if (admin) headers["x-watch-admin"] = admin;
   return worker.fetch(new Request(`https://tools.trenith.com/api/watch/${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined }), environment, context);
 }
 
@@ -125,4 +128,36 @@ test("watch API rejects unsupported providers and oversized encrypted events", a
   const created = await (await request("rooms", { method: "POST", accessKey, body: { inviteProof, displayName: "Host", provider: "netflix" } })).json();
   const oversized = await request(`rooms/${created.roomId}/events`, { method: "POST", token: created.participantToken, body: { payload: `chat:${"x".repeat(65 * 1024)}` } });
   assert.equal(oversized.status, 413);
+});
+
+
+async function makeToken(secret, id, ttlMs) {
+  const payload = `${id}.${Date.now() + ttlMs}`;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+  const b64 = (bytes) => Buffer.from(bytes).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return `${b64(new TextEncoder().encode(payload))}.${b64(sig)}`;
+}
+
+test("access review: admin list, admin reject, and signed-token approve", async () => {
+  const pend = await (await request("access", { method: "POST", body: { email: "guest@example.org", name: "Guest", reason: "movie night" } })).json();
+  assert.equal(pend.status, "pending");
+  const listRes = await request("access/list?status=pending", { admin: ADMIN_SECRET });
+  assert.equal(listRes.status, 200);
+  const row = (await listRes.json()).requests.find((r) => r.email === "guest@example.org");
+  assert.ok(row && row.status === "pending", "pending request is listed");
+  assert.equal((await request("access/list")).status, 401);
+  const token = await makeToken(ADMIN_SECRET, row.id, 60000);
+  const preview = await (await request("access/action", { method: "POST", body: { token } })).json();
+  assert.equal(preview.request.email, "guest@example.org");
+  assert.equal(preview.request.status, "pending");
+  const approved = await (await request("access/action", { method: "POST", body: { token, decision: "approve" } })).json();
+  assert.equal(approved.status, "approved");
+  const after = (await (await request("access/list?status=all", { admin: ADMIN_SECRET })).json()).requests.find((r) => r.email === "guest@example.org");
+  assert.equal(after.status, "approved");
+  assert.equal((await request("access/action", { method: "POST", body: { token: "bogus.token" } })).status, 401);
+  await request("access", { method: "POST", body: { email: "guest2@example.org", name: "Guest Two" } });
+  const rej = await request("access/reject", { method: "POST", admin: ADMIN_SECRET, body: { email: "guest2@example.org" } });
+  assert.equal(rej.status, 200);
+  assert.equal((await rej.json()).status, "rejected");
 });

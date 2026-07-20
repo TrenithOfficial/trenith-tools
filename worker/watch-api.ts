@@ -38,6 +38,7 @@ export type WatchApiEnv = {
   WATCH_ACCESS_EMAIL_FROM?: string;     // verified Resend sender
   WATCH_ACCESS_EMAIL_TO?: string;       // where new pending requests are notified
   WATCH_PROXY_SECRET?: string;          // shared with the Vercel proxy so it can assert the real client IP
+  WATCH_REVIEW_URL?: string;            // review page for email Approve/Reject links (defaults to tools.trenith.com)
 };
 
 // A minimal structural view of the Workers ExecutionContext. Declared here
@@ -408,7 +409,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 // a returned handler cancels the in-flight fetch and the email silently never
 // sends. No ctx (e.g. the Node tests) falls back to fire-and-forget, and any
 // delivery error is swallowed — email is always best-effort.
-function sendAccessEmail(ctx: WatchExecutionCtx | undefined, env: WatchApiEnv, to: string, subject: string, text: string): void {
+function sendAccessEmail(ctx: WatchExecutionCtx | undefined, env: WatchApiEnv, to: string, subject: string, text: string, html?: string): void {
   if (!env.RESEND_API_KEY) { console.warn("[watch-email] skipped: RESEND_API_KEY not set"); return; }
   if (!to) { console.warn("[watch-email] skipped: empty recipient (WATCH_ACCESS_EMAIL_TO unset?)"); return; }
   const from = env.WATCH_ACCESS_EMAIL_FROM || "Trenith Watch Together <onboarding@resend.dev>";
@@ -417,7 +418,7 @@ function sendAccessEmail(ctx: WatchExecutionCtx | undefined, env: WatchApiEnv, t
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
-        body: JSON.stringify({ from, to: [to], subject, text }),
+        body: JSON.stringify({ from, to: [to], subject, text, ...(html ? { html } : {}) }),
       });
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
@@ -431,6 +432,115 @@ function sendAccessEmail(ctx: WatchExecutionCtx | undefined, env: WatchApiEnv, t
     }
   })();
   if (ctx) ctx.waitUntil(work); else void work;
+}
+
+// --- Signed action tokens (email one-click approve/reject) -------------------
+// The review-inbox email carries Approve/Reject links whose token is an HMAC
+// over the request id, so the reviewer acts without the admin secret ever
+// appearing in a URL. Tokens expire; approve/reject are idempotent so a link
+// re-opened (or prefetched by a mail scanner) does no harm — and nothing mutates
+// until the review page POSTs a decision.
+const B64URL = {
+  encode(bytes: Uint8Array): string {
+    let s = "";
+    for (const b of bytes) s += String.fromCharCode(b);
+    return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  },
+  decode(text: string): Uint8Array {
+    const s = atob(text.replace(/-/g, "+").replace(/_/g, "/"));
+    const out = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i += 1) out[i] = s.charCodeAt(i);
+    return out;
+  },
+};
+
+async function hmacSha256(secret: string, message: string): Promise<Uint8Array> {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(message)));
+}
+
+async function makeActionToken(secret: string, id: string, ttlMs: number): Promise<string> {
+  const payload = `${id}.${Date.now() + ttlMs}`;
+  const sig = await hmacSha256(secret, payload);
+  return `${B64URL.encode(new TextEncoder().encode(payload))}.${B64URL.encode(sig)}`;
+}
+
+// Returns the request id when the token is valid and unexpired, else null.
+async function verifyActionToken(secret: string, token: string): Promise<string | null> {
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  let payload: string;
+  try { payload = new TextDecoder().decode(B64URL.decode(parts[0])); } catch { return null; }
+  let given: Uint8Array;
+  try { given = B64URL.decode(parts[1]); } catch { return null; }
+  const expected = await hmacSha256(secret, payload);
+  if (given.length !== expected.length) return null;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i += 1) diff |= expected[i] ^ given[i];
+  if (diff !== 0) return null;
+  const dot = payload.lastIndexOf(".");
+  const id = payload.slice(0, dot);
+  const exp = Number(payload.slice(dot + 1));
+  if (!id || !Number.isFinite(exp) || exp < Date.now()) return null;
+  return id;
+}
+
+function reviewBaseUrl(env: WatchApiEnv): string {
+  return (env.WATCH_REVIEW_URL || "https://tools.trenith.com/watch-together/review").replace(/\/$/, "");
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// Branded HTML for the review-inbox notification, matching tools.trenith.com.
+function renderAccessRequestEmail(opts: { email: string; name: string; reason: string; reviewUrl: string }): string {
+  const row = (label: string, value: string) => `<tr><td style="padding:4px 0;color:#6e6b76;font-size:13px;width:74px;vertical-align:top;">${label}</td><td style="padding:4px 0;color:#191821;font-size:14px;font-weight:600;">${value}</td></tr>`;
+  return `<!doctype html><html><body style="margin:0;background:#f1ecdf;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f1ecdf;padding:28px 12px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
+    <tr><td align="center">
+      <table role="presentation" width="520" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fffdf8;border:1px solid rgba(25,24,33,.1);border-radius:18px;overflow:hidden;">
+        <tr><td style="padding:26px 30px 4px;"><img src="https://tools.trenith.com/trenith-mark.png" width="34" height="34" alt="Trenith" style="display:block;border:0;" /></td></tr>
+        <tr><td style="padding:6px 30px 4px;">
+          <div style="color:#2855ff;font-size:12px;font-weight:800;letter-spacing:.14em;">WATCH TOGETHER · NEW REQUEST</div>
+          <h1 style="margin:8px 0 4px;color:#191821;font-size:22px;font-weight:800;letter-spacing:-.02em;">Someone requested access</h1>
+          <p style="margin:0 0 14px;color:#6e6b76;font-size:14px;line-height:1.6;">Approve to mint their access key and email it to them, or reject to close the request.</p>
+        </td></tr>
+        <tr><td style="padding:0 30px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid rgba(25,24,33,.1);border-radius:12px;background:#faf7f0;">
+            <tr><td style="padding:8px 14px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0">${row("Email", escapeHtml(opts.email))}${row("Name", escapeHtml(opts.name))}${row("Reason", escapeHtml(opts.reason || "(none)"))}</table></td></tr>
+          </table>
+        </td></tr>
+        <tr><td style="padding:20px 30px 6px;">
+          <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+            <td style="padding-right:10px;"><a href="${opts.reviewUrl}&a=approve" style="display:inline-block;background:#0a8f52;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:11px 22px;border-radius:10px;">Approve access</a></td>
+            <td><a href="${opts.reviewUrl}&a=reject" style="display:inline-block;background:#c02626;color:#ffffff;text-decoration:none;font-size:14px;font-weight:700;padding:11px 22px;border-radius:10px;">Reject</a></td>
+          </tr></table>
+        </td></tr>
+        <tr><td style="padding:14px 30px 28px;"><p style="margin:0;color:#8a8792;font-size:12px;line-height:1.6;">Buttons open a confirmation page — nothing changes until you confirm there. You can also review every request in Trenith HQ under Watch Party.</p></td></tr>
+      </table>
+      <p style="margin:14px 0 0;color:#a09da8;font-size:11px;">Trenith Tools · tools.trenith.com</p>
+    </td></tr>
+  </table></body></html>`;
+}
+
+// --- Approve / reject a specific request by id (shared by every channel) -----
+async function approveById(db: WatchD1, env: WatchApiEnv, ctx: WatchExecutionCtx | undefined, id: string): Promise<{ ok: true; email: string } | { ok: false; error: string; code: number }> {
+  const existing = await db.prepare("SELECT id, email, status FROM watch_access WHERE id = ? LIMIT 1").bind(id).first<{ id: string; email: string; status: string }>();
+  if (!existing) return { ok: false, error: "That request no longer exists.", code: 404 };
+  if (existing.status === "approved") return { ok: true, email: existing.email }; // idempotent
+  const accessKey = randomId(30);
+  await db.prepare("UPDATE watch_access SET status = 'approved', key_hash = ?, decided_at = ? WHERE id = ?").bind(await sha256(accessKey), Date.now(), id).run();
+  sendAccessEmail(ctx, env, existing.email, "Your Trenith Watch Together access is approved", `You're approved. Your access key:\n\n${accessKey}\n\nEnter it on tools.trenith.com/watch-together to create watch rooms.`);
+  return { ok: true, email: existing.email };
+}
+
+async function rejectById(db: WatchD1, id: string): Promise<{ ok: true; email: string } | { ok: false; error: string; code: number }> {
+  const existing = await db.prepare("SELECT id, email, status FROM watch_access WHERE id = ? LIMIT 1").bind(id).first<{ id: string; email: string; status: string }>();
+  if (!existing) return { ok: false, error: "That request no longer exists.", code: 404 };
+  if (existing.status === "approved") return { ok: false, error: "That request was already approved.", code: 409 };
+  if (existing.status !== "rejected") await db.prepare("UPDATE watch_access SET status = 'rejected', decided_at = ? WHERE id = ?").bind(Date.now(), id).run();
+  return { ok: true, email: existing.email };
 }
 
 // A room can only be created with an approved access key. Guests joining an
@@ -469,29 +579,84 @@ async function requestAccess(request: Request, db: WatchD1, env: WatchApiEnv, ct
     return json(request, { status: "approved", accessKey, message: "You're approved. Save this access key — it unlocks room creation." }, 201);
   }
 
+  const id = randomId(12);
   await db.prepare(`INSERT INTO watch_access (id, email, display_name, reason, domain, status, created_at)
     VALUES (?, ?, ?, ?, ?, 'pending', ?)`)
-    .bind(randomId(12), email, displayName, reason || null, domain, now).run();
+    .bind(id, email, displayName, reason || null, domain, now).run();
   sendAccessEmail(ctx, env, email, "Trenith Watch Together — access requested", "Thanks for requesting access to Trenith Watch Together. We review requests and, if approved, email your access credentials within 24 hours.");
-  sendAccessEmail(ctx, env, env.WATCH_ACCESS_EMAIL_TO || "", "New Watch Together access request", `Email: ${email}\nName: ${displayName}\nReason: ${reason || "(none)"}`);
+  // Notify the review inbox. When an admin secret is configured, include branded
+  // Approve/Reject buttons backed by a signed, 14-day token.
+  const adminText = `Email: ${email}\nName: ${displayName}\nReason: ${reason || "(none)"}\n\nReview in Trenith HQ under Watch Party.`;
+  let adminHtml: string | undefined;
+  if (env.WATCH_ADMIN_SECRET) {
+    const token = await makeActionToken(env.WATCH_ADMIN_SECRET, id, 14 * 24 * 60 * 60 * 1000);
+    const reviewUrl = `${reviewBaseUrl(env)}?token=${encodeURIComponent(token)}`;
+    adminHtml = renderAccessRequestEmail({ email, name: displayName, reason, reviewUrl });
+  }
+  sendAccessEmail(ctx, env, env.WATCH_ACCESS_EMAIL_TO || "", "New Watch Together access request", adminText, adminHtml);
   return json(request, { status: "pending", message: "Thanks — we'll review your request and email your access credentials within 24 hours if approved." }, 202);
 }
 
-// Manual review path, protected by a shared admin secret. Approves a pending
-// email, mints its access key and (optionally) emails it.
+function isAdmin(request: Request, env: WatchApiEnv): boolean {
+  return Boolean(env.WATCH_ADMIN_SECRET) && (request.headers.get("x-watch-admin") || "") === env.WATCH_ADMIN_SECRET;
+}
+
+// Manual review by email, protected by the shared admin secret.
 async function adminApprove(request: Request, db: WatchD1, env: WatchApiEnv, ctx?: WatchExecutionCtx): Promise<Response> {
-  if (!env.WATCH_ADMIN_SECRET || (request.headers.get("x-watch-admin") || "") !== env.WATCH_ADMIN_SECRET) {
-    return json(request, { error: "Not authorized." }, 401);
-  }
+  if (!isAdmin(request, env)) return json(request, { error: "Not authorized." }, 401);
   const body = await readBody(request);
   const email = String(body.email || "").trim().toLowerCase();
   if (!EMAIL_RE.test(email)) return json(request, { error: "Enter a valid email address." }, 400);
   const pending = await db.prepare("SELECT id FROM watch_access WHERE email = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1").bind(email).first<{ id: string }>();
   if (!pending) return json(request, { error: "No pending request for that email." }, 404);
-  const accessKey = randomId(30);
-  await db.prepare("UPDATE watch_access SET status = 'approved', key_hash = ?, decided_at = ? WHERE id = ?").bind(await sha256(accessKey), Date.now(), pending.id).run();
-  sendAccessEmail(ctx, env, email, "Your Trenith Watch Together access is approved", `You're approved. Your access key:\n\n${accessKey}\n\nEnter it on tools.trenith.com/watch-together to create watch rooms.`);
-  return json(request, { status: "approved", email, accessKey }, 200);
+  const result = await approveById(db, env, ctx, pending.id);
+  if (!result.ok) return json(request, { error: result.error }, result.code);
+  return json(request, { status: "approved", email }, 200);
+}
+
+async function adminReject(request: Request, db: WatchD1, env: WatchApiEnv): Promise<Response> {
+  if (!isAdmin(request, env)) return json(request, { error: "Not authorized." }, 401);
+  const body = await readBody(request);
+  const email = String(body.email || "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return json(request, { error: "Enter a valid email address." }, 400);
+  const pending = await db.prepare("SELECT id FROM watch_access WHERE email = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1").bind(email).first<{ id: string }>();
+  if (!pending) return json(request, { error: "No pending request for that email." }, 404);
+  const result = await rejectById(db, pending.id);
+  if (!result.ok) return json(request, { error: result.error }, result.code);
+  return json(request, { status: "rejected", email }, 200);
+}
+
+// Read-only list of requests for Trenith HQ to mirror and display.
+async function accessList(request: Request, db: WatchD1, env: WatchApiEnv): Promise<Response> {
+  if (!isAdmin(request, env)) return json(request, { error: "Not authorized." }, 401);
+  const url = new URL(request.url);
+  const status = url.searchParams.get("status") || "pending";
+  const limit = Math.min(500, Math.max(1, Number(url.searchParams.get("limit")) || 200));
+  const columns = "id, email, display_name, reason, domain, status, created_at, decided_at";
+  const stmt = status === "all"
+    ? db.prepare(`SELECT ${columns} FROM watch_access ORDER BY created_at DESC LIMIT ?`).bind(limit)
+    : db.prepare(`SELECT ${columns} FROM watch_access WHERE status = ? ORDER BY created_at DESC LIMIT ?`).bind(status, limit);
+  const { results } = await stmt.all<Record<string, unknown>>();
+  return json(request, { requests: results || [] }, 200);
+}
+
+// Token-backed endpoint for the email review page. With no decision it returns a
+// preview; { decision: "approve" | "reject" } performs the action. The token
+// (not the admin secret) authorizes it, so it is safe to reach from a browser.
+async function accessAction(request: Request, db: WatchD1, env: WatchApiEnv, ctx?: WatchExecutionCtx): Promise<Response> {
+  if (!env.WATCH_ADMIN_SECRET) return json(request, { error: "Review is not configured." }, 503);
+  const body = await readBody(request);
+  const id = await verifyActionToken(env.WATCH_ADMIN_SECRET, String(body.token || ""));
+  if (!id) return json(request, { error: "This review link is invalid or has expired." }, 401);
+  const row = await db.prepare("SELECT email, display_name, reason, status FROM watch_access WHERE id = ? LIMIT 1").bind(id).first<{ email: string; display_name: string; reason: string | null; status: string }>();
+  if (!row) return json(request, { error: "That request no longer exists." }, 404);
+  const decision = String(body.decision || "");
+  if (decision !== "approve" && decision !== "reject") {
+    return json(request, { request: { email: row.email, name: row.display_name, reason: row.reason || "", status: row.status } }, 200);
+  }
+  const result = decision === "approve" ? await approveById(db, env, ctx, id) : await rejectById(db, id);
+  if (!result.ok) return json(request, { error: result.error }, result.code);
+  return json(request, { status: decision === "approve" ? "approved" : "rejected", email: row.email }, 200);
 }
 
 export async function handleWatchApi(request: Request, env: WatchApiEnv, ctx?: WatchExecutionCtx): Promise<Response> {
@@ -510,6 +675,9 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv, ctx?: W
     if (path === "health" && request.method === "GET") return json(request, { status: "ok", protocolVersion: WATCH_PROTOCOL_VERSION, serverTime: now });
     if (path === "access" && request.method === "POST") return await rateLimit(request, env, "access", 6, 60 * 60 * 1000) || await requestAccess(request, env.DB, env, ctx);
     if (path === "access/approve" && request.method === "POST") return await adminApprove(request, env.DB, env, ctx);
+    if (path === "access/reject" && request.method === "POST") return await adminReject(request, env.DB, env);
+    if (path === "access/list" && request.method === "GET") return await accessList(request, env.DB, env);
+    if (path === "access/action" && request.method === "POST") return await rateLimit(request, env, "access-action", 40, 60 * 60 * 1000) || await accessAction(request, env.DB, env, ctx);
     // Every handler below is awaited. Returning a bare promise from inside this
     // try block would let a rejection settle after the block exits, escaping the
     // catch entirely and surfacing an uncaught worker exception (HTTP 500 with a
