@@ -81,11 +81,20 @@ fallback host, so the feature returns 503 until this is deployed and configured.
 
 Deploy it as a standalone Cloudflare Worker (config: `wrangler.watch.toml`):
 
+Comments are on their own lines below because zsh does not strip trailing `#`
+comments in an interactive shell — pasting them after a command sends them to
+the command as arguments.
+
 ```bash
-wrangler login                 # one-time, opens your browser
-npm run watch:d1:create        # prints a database_id
-# paste that id into wrangler.watch.toml -> [[d1_databases]] database_id
-npm run watch:deploy           # prints the https://<name>.<subdomain>.workers.dev URL
+# One-time: opens your browser to authorise the Cloudflare account.
+npx wrangler login
+
+# Creates the database and prints a database_id.
+# Paste that id into wrangler.watch.toml under [[d1_databases]].
+npm run watch:d1:create
+
+# Deploys and prints the https://<name>.<subdomain>.workers.dev URL.
+npm run watch:deploy
 ```
 
 The room schema is self-provisioning — the worker creates its tables and indexes

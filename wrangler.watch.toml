@@ -19,7 +19,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "trenith-watch"
-database_id = "REPLACE_WITH_ID_FROM_watch:d1:create"
+database_id = "dc15e264-5454-45a8-8a0d-2556f73457b8"
 
 [observability]
 enabled = true

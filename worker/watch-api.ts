@@ -371,17 +371,21 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv): Promis
     }
     const path = new URL(request.url).pathname.replace(/^\/api\/watch\/?/, "");
     if (path === "health" && request.method === "GET") return json(request, { status: "ok", protocolVersion: WATCH_PROTOCOL_VERSION, serverTime: now });
-    if (path === "rooms" && request.method === "POST") return await rateLimit(request, env.DB, "create", 20, 60 * 60 * 1000) || createRoom(request, env.DB);
+    // Every handler below is awaited. Returning a bare promise from inside this
+    // try block would let a rejection settle after the block exits, escaping the
+    // catch entirely and surfacing an uncaught worker exception (HTTP 500 with a
+    // platform error page) instead of a clean JSON error.
+    if (path === "rooms" && request.method === "POST") return await rateLimit(request, env.DB, "create", 20, 60 * 60 * 1000) || await createRoom(request, env.DB);
 
     const match = path.match(/^rooms\/([^/]+)(?:\/(events|leave|ice))?$/);
     if (!match || !isWatchRoomId(match[1])) return json(request, { error: "Watch Together route not found." }, 404);
     const [, roomId, action] = match;
-    if (!action && request.method === "POST") return await rateLimit(request, env.DB, `join:${roomId}`, 60, 10 * 60 * 1000) || joinRoom(request, env.DB, roomId);
-    if (!action && request.method === "DELETE") return endRoom(request, env.DB, roomId);
-    if (action === "events" && request.method === "POST") return await rateLimit(request, env.DB, `event-write:${roomId}:${bearerToken(request)}`, 180, 60 * 1000) || postEvent(request, env.DB, roomId);
-    if (action === "events" && request.method === "GET") return getEvents(request, env.DB, roomId);
-    if (action === "leave" && request.method === "POST") return leaveRoom(request, env.DB, roomId);
-    if (action === "ice" && request.method === "GET") return await rateLimit(request, env.DB, `ice:${roomId}`, 30, 10 * 60 * 1000) || iceServers(request, env.DB, env, roomId);
+    if (!action && request.method === "POST") return await rateLimit(request, env.DB, `join:${roomId}`, 60, 10 * 60 * 1000) || await joinRoom(request, env.DB, roomId);
+    if (!action && request.method === "DELETE") return await endRoom(request, env.DB, roomId);
+    if (action === "events" && request.method === "POST") return await rateLimit(request, env.DB, `event-write:${roomId}:${bearerToken(request)}`, 180, 60 * 1000) || await postEvent(request, env.DB, roomId);
+    if (action === "events" && request.method === "GET") return await getEvents(request, env.DB, roomId);
+    if (action === "leave" && request.method === "POST") return await leaveRoom(request, env.DB, roomId);
+    if (action === "ice" && request.method === "GET") return await rateLimit(request, env.DB, `ice:${roomId}`, 30, 10 * 60 * 1000) || await iceServers(request, env.DB, env, roomId);
     return json(request, { error: "Method not allowed." }, 405, { allow: "GET, POST, DELETE, OPTIONS" });
   } catch (error) {
     // Only surface the body-parsing messages we deliberately raise in readBody;
