@@ -21,8 +21,29 @@ async function watchRequest<T>(path: string, init: RequestInit = {}): Promise<T>
   return body;
 }
 
+const ACCESS_KEY_STORAGE = "trenith-watch-access";
+
+export function getWatchAccessKey(): string {
+  try { return localStorage.getItem(ACCESS_KEY_STORAGE) || ""; } catch { return ""; }
+}
+export function setWatchAccessKey(key: string) {
+  try { if (key) localStorage.setItem(ACCESS_KEY_STORAGE, key); else localStorage.removeItem(ACCESS_KEY_STORAGE); } catch { /* storage unavailable */ }
+}
+
+export type WatchAccessResult = { status: "approved" | "approved-existing" | "pending"; accessKey?: string; message: string };
+
+// Request access to create rooms. Approved emails (the configured domain) get a
+// key back immediately; everyone else is told they will be reviewed.
+export function requestWatchAccess(input: { name: string; email: string; reason?: string }) {
+  return watchRequest<WatchAccessResult>("access", { method: "POST", body: JSON.stringify({ displayName: input.name, email: input.email, reason: input.reason || "" }) });
+}
+
 export function createRoom(input: { displayName: string; provider: WatchProviderId; controlMode: "host" | "everyone"; inviteProof: string }) {
-  return watchRequest<WatchRoomSession>("rooms", { method: "POST", body: JSON.stringify(input) });
+  return watchRequest<WatchRoomSession>("rooms", {
+    method: "POST",
+    headers: { "x-watch-access": getWatchAccessKey() },
+    body: JSON.stringify(input),
+  });
 }
 
 export function joinRoom(roomId: string, input: { displayName: string; inviteProof: string }) {

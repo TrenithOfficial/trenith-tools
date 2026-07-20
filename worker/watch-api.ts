@@ -29,6 +29,14 @@ export type WatchApiEnv = {
   DB?: WatchD1;
   TURN_KEY_ID?: string;
   TURN_KEY_API_TOKEN?: string;
+  // Access gating: room creation requires an approved access key. Emails in the
+  // auto-approve domain are granted instantly; everyone else is held for review.
+  // These are all optional so the feature degrades gracefully when unset.
+  WATCH_AUTO_APPROVE_DOMAIN?: string;   // defaults to "trenith.com"
+  WATCH_ADMIN_SECRET?: string;          // enables POST /access/approve for manual review
+  RESEND_API_KEY?: string;              // optional: email the access key / confirmation
+  WATCH_ACCESS_EMAIL_FROM?: string;     // verified Resend sender
+  WATCH_ACCESS_EMAIL_TO?: string;       // where new pending requests are notified
 };
 
 type ParticipantRow = {
@@ -82,6 +90,19 @@ const schemaStatements = [
     reset_at INTEGER NOT NULL
   )`,
   `CREATE INDEX IF NOT EXISTS watch_rate_limits_reset_idx ON watch_rate_limits (reset_at)`,
+  `CREATE TABLE IF NOT EXISTS watch_access (
+    id TEXT PRIMARY KEY NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    reason TEXT,
+    domain TEXT NOT NULL,
+    key_hash TEXT,
+    status TEXT DEFAULT 'pending' NOT NULL,
+    created_at INTEGER NOT NULL,
+    decided_at INTEGER
+  )`,
+  `CREATE INDEX IF NOT EXISTS watch_access_key_idx ON watch_access (key_hash)`,
+  `CREATE INDEX IF NOT EXISTS watch_access_email_idx ON watch_access (email)`,
 ];
 
 let schemaReady: Promise<void> | null = null;
@@ -357,6 +378,82 @@ async function iceServers(request: Request, db: WatchD1, env: WatchApiEnv, roomI
   return json(request, { iceServers: [{ urls: ["stun:stun.cloudflare.com:3478"] }], relay: false });
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+// Optional transactional email through Resend. Never throws into the request
+// path — a delivery failure must not fail the access request itself.
+async function sendAccessEmail(env: WatchApiEnv, to: string, subject: string, text: string): Promise<void> {
+  if (!env.RESEND_API_KEY || !to) return;
+  try {
+    await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
+      body: JSON.stringify({ from: env.WATCH_ACCESS_EMAIL_FROM || "Trenith Watch Together <onboarding@resend.dev>", to: [to], subject, text }),
+    });
+  } catch { /* delivery is best-effort */ }
+}
+
+// A room can only be created with an approved access key. Guests joining an
+// existing room via an invitation link do NOT pass through here, so a shared
+// link keeps working for people outside the approved audience.
+async function requireCreateAccess(request: Request, db: WatchD1): Promise<Response | null> {
+  const key = (request.headers.get("x-watch-access") || "").trim();
+  if (!key) return json(request, { error: "Creating a room needs approved Watch Together access. Request access first.", code: "access-required" }, 403);
+  const row = await db.prepare("SELECT id FROM watch_access WHERE key_hash = ? AND status = 'approved' LIMIT 1").bind(await sha256(key)).first<{ id: string }>();
+  if (!row) return json(request, { error: "This access key is not valid or has not been approved yet.", code: "access-invalid" }, 403);
+  return null;
+}
+
+async function requestAccess(request: Request, db: WatchD1, env: WatchApiEnv): Promise<Response> {
+  const body = await readBody(request);
+  const email = String(body.email || "").trim().toLowerCase().slice(0, 200);
+  const displayName = normalizeDisplayName(body.displayName || body.name);
+  const reason = String(body.reason || "").trim().slice(0, 500);
+  if (!EMAIL_RE.test(email)) return json(request, { error: "Enter a valid email address." }, 400);
+  if (!displayName) return json(request, { error: "Enter your name." }, 400);
+  const domain = email.slice(email.indexOf("@") + 1);
+  const autoDomain = (env.WATCH_AUTO_APPROVE_DOMAIN || "trenith.com").toLowerCase();
+  const now = Date.now();
+
+  // If this email already has an approved grant, return it again instead of
+  // creating duplicates, so re-requesting is idempotent.
+  const existing = await db.prepare("SELECT status FROM watch_access WHERE email = ? AND status = 'approved' LIMIT 1").bind(email).first<{ status: string }>();
+  if (existing) return json(request, { status: "approved-existing", message: "This email is already approved. If you lost your access key, contact support@trenith.com." }, 200);
+
+  if (domain === autoDomain) {
+    const accessKey = randomId(30);
+    await db.prepare(`INSERT INTO watch_access (id, email, display_name, reason, domain, key_hash, status, created_at, decided_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?)`)
+      .bind(randomId(12), email, displayName, reason || null, domain, await sha256(accessKey), now, now).run();
+    void sendAccessEmail(env, email, "Your Trenith Watch Together access", `You're approved. Your access key:\n\n${accessKey}\n\nKeep it private — it lets you create watch rooms on tools.trenith.com/watch-together.`);
+    return json(request, { status: "approved", accessKey, message: "You're approved. Save this access key — it unlocks room creation." }, 201);
+  }
+
+  await db.prepare(`INSERT INTO watch_access (id, email, display_name, reason, domain, status, created_at)
+    VALUES (?, ?, ?, ?, ?, 'pending', ?)`)
+    .bind(randomId(12), email, displayName, reason || null, domain, now).run();
+  void sendAccessEmail(env, email, "Trenith Watch Together — access requested", "Thanks for requesting access to Trenith Watch Together. We review requests and, if approved, email your access credentials within 24 hours.");
+  void sendAccessEmail(env, env.WATCH_ACCESS_EMAIL_TO || "", "New Watch Together access request", `Email: ${email}\nName: ${displayName}\nReason: ${reason || "(none)"}`);
+  return json(request, { status: "pending", message: "Thanks — we'll review your request and email your access credentials within 24 hours if approved." }, 202);
+}
+
+// Manual review path, protected by a shared admin secret. Approves a pending
+// email, mints its access key and (optionally) emails it.
+async function adminApprove(request: Request, db: WatchD1, env: WatchApiEnv): Promise<Response> {
+  if (!env.WATCH_ADMIN_SECRET || (request.headers.get("x-watch-admin") || "") !== env.WATCH_ADMIN_SECRET) {
+    return json(request, { error: "Not authorized." }, 401);
+  }
+  const body = await readBody(request);
+  const email = String(body.email || "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return json(request, { error: "Enter a valid email address." }, 400);
+  const pending = await db.prepare("SELECT id FROM watch_access WHERE email = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 1").bind(email).first<{ id: string }>();
+  if (!pending) return json(request, { error: "No pending request for that email." }, 404);
+  const accessKey = randomId(30);
+  await db.prepare("UPDATE watch_access SET status = 'approved', key_hash = ?, decided_at = ? WHERE id = ?").bind(await sha256(accessKey), Date.now(), pending.id).run();
+  void sendAccessEmail(env, email, "Your Trenith Watch Together access is approved", `You're approved. Your access key:\n\n${accessKey}\n\nEnter it on tools.trenith.com/watch-together to create watch rooms.`);
+  return json(request, { status: "approved", email, accessKey }, 200);
+}
+
 export async function handleWatchApi(request: Request, env: WatchApiEnv): Promise<Response> {
   // A 204 response must have no body; Response.json() always writes one and
   // throws. Return a bodyless preflight with the CORS headers directly.
@@ -371,11 +468,13 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv): Promis
     }
     const path = new URL(request.url).pathname.replace(/^\/api\/watch\/?/, "");
     if (path === "health" && request.method === "GET") return json(request, { status: "ok", protocolVersion: WATCH_PROTOCOL_VERSION, serverTime: now });
+    if (path === "access" && request.method === "POST") return await rateLimit(request, env.DB, "access", 6, 60 * 60 * 1000) || await requestAccess(request, env.DB, env);
+    if (path === "access/approve" && request.method === "POST") return await adminApprove(request, env.DB, env);
     // Every handler below is awaited. Returning a bare promise from inside this
     // try block would let a rejection settle after the block exits, escaping the
     // catch entirely and surfacing an uncaught worker exception (HTTP 500 with a
     // platform error page) instead of a clean JSON error.
-    if (path === "rooms" && request.method === "POST") return await rateLimit(request, env.DB, "create", 20, 60 * 60 * 1000) || await createRoom(request, env.DB);
+    if (path === "rooms" && request.method === "POST") return await rateLimit(request, env.DB, "create", 20, 60 * 60 * 1000) || await requireCreateAccess(request, env.DB) || await createRoom(request, env.DB);
 
     const match = path.match(/^rooms\/([^/]+)(?:\/(events|leave|ice))?$/);
     if (!match || !isWatchRoomId(match[1])) return json(request, { error: "Watch Together route not found." }, 404);

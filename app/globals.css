@@ -660,6 +660,10 @@ h1 em,h2 em { color: #77727d; }
 .watch-create-button { width: 100%; min-height: 52px; margin-top: 20px; border-radius: 12px; background: linear-gradient(135deg,var(--accent),var(--accent-3)); box-shadow: 0 14px 35px rgba(var(--accent-rgb),.2); color: #fff; cursor: pointer; font-size: 14px; font-weight: 850; }
 .watch-create-button:disabled { cursor: wait; opacity: .6; }
 .watch-legal-note { margin: 12px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; text-align: center; }.watch-legal-note a { text-decoration: underline; }
+.watch-access-note { margin: 10px 0 0; color: var(--soft); font-size: 13px; line-height: 1.6; }
+.watch-access-checking { text-align: center; color: var(--muted); }
+.watch-access-done .watch-form-title strong { color: var(--good); }
+.watch-create-card textarea { width: 100%; margin-top: 6px; padding: 11px 12px; font-size: 14px; color: var(--text); background: var(--surface-high); border: 1px solid var(--line-strong); border-radius: 10px; resize: vertical; font-family: inherit; line-height: 1.5; }
 .watch-form-error { margin: 12px 0 0; padding: 10px 11px; border: 1px solid rgba(200,57,80,.25); border-radius: 9px; background: rgba(200,57,80,.07); color: var(--danger); font-size: 12.5px; line-height: 1.5; }
 .watch-provider-strip { border-block: 1px solid var(--line); background: rgba(255,255,255,.42); }
 .watch-provider-strip > div { min-height: 88px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }

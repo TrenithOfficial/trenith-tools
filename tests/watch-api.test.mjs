@@ -27,12 +27,18 @@ const environment = {
 };
 const context = { waitUntil() {}, passThroughOnException() {} };
 
-async function request(path, { method = "GET", token, body } = {}) {
+async function request(path, { method = "GET", token, body, accessKey } = {}) {
   const headers = { origin: "https://tools.trenith.com" };
   if (body) headers["content-type"] = "application/json";
   if (token) headers.authorization = `Bearer ${token}`;
+  if (accessKey) headers["x-watch-access"] = accessKey;
   return worker.fetch(new Request(`https://tools.trenith.com/api/watch/${path}`, { method, headers, body: body ? JSON.stringify(body) : undefined }), environment, context);
 }
+
+// Room creation now requires an approved access key. Trenith-domain emails are
+// auto-approved, so provision one key up front for the room-flow tests.
+const approved = await (await request("access", { method: "POST", body: { email: "host@trenith.com", name: "Host" } })).json();
+const accessKey = approved.accessKey;
 
 test("watch room API enforces invitation proof, tokens, targeting and host termination", async () => {
   const health = await request("health");
@@ -40,7 +46,7 @@ test("watch room API enforces invitation proof, tokens, targeting and host termi
   assert.equal((await health.json()).protocolVersion, 1);
 
   const inviteProof = "abcdefghijklmnopqrstuvwxyzABCDEFGH123456";
-  const createdResponse = await request("rooms", { method: "POST", body: { inviteProof, displayName: " Host ", provider: "youtube", controlMode: "host" } });
+  const createdResponse = await request("rooms", { method: "POST", accessKey, body: { inviteProof, displayName: " Host ", provider: "youtube", controlMode: "host" } });
   assert.equal(createdResponse.status, 201);
   const host = await createdResponse.json();
   assert.match(host.roomId, /^[A-Za-z0-9_-]{20,32}$/);
@@ -81,11 +87,42 @@ test("watch room API enforces invitation proof, tokens, targeting and host termi
   assert.equal(afterEnd.status, 401);
 });
 
+test("access gating: trenith emails auto-approve, others pend, creation needs a key, joining does not", async () => {
+  // Trenith-domain email is approved instantly and returns a usable key.
+  const auto = await request("access", { method: "POST", body: { email: "team@trenith.com", name: "Team" } });
+  assert.equal(auto.status, 201);
+  const autoBody = await auto.json();
+  assert.equal(autoBody.status, "approved");
+  assert.match(autoBody.accessKey, /^[A-Za-z0-9_-]{24,40}$/);
+
+  // Outside email is held for review, no key handed out.
+  const pending = await request("access", { method: "POST", body: { email: "someone@example.com", name: "Someone" } });
+  assert.equal(pending.status, 202);
+  const pendingBody = await pending.json();
+  assert.equal(pendingBody.status, "pending");
+  assert.equal(pendingBody.accessKey, undefined);
+
+  // Invalid email is rejected.
+  assert.equal((await request("access", { method: "POST", body: { email: "not-an-email", name: "X" } })).status, 400);
+
+  // Creating a room with no key / a bogus key is refused.
+  const proof = "proofPROOFproofPROOFproof1234567890AB";
+  assert.equal((await request("rooms", { method: "POST", body: { inviteProof: proof, displayName: "NoKey", provider: "youtube" } })).status, 403);
+  assert.equal((await request("rooms", { method: "POST", accessKey: "totally-invalid-key", body: { inviteProof: proof, displayName: "BadKey", provider: "youtube" } })).status, 403);
+
+  // With a valid key, creation works — and a guest can then join with only the
+  // invitation proof (no access key), so shared links reach anyone.
+  const room = await (await request("rooms", { method: "POST", accessKey: autoBody.accessKey, body: { inviteProof: proof, displayName: "Owner", provider: "youtube" } })).json();
+  const guest = await request(`rooms/${room.roomId}`, { method: "POST", body: { inviteProof: proof, displayName: "Friend" } });
+  assert.equal(guest.status, 201);
+  assert.equal((await guest.json()).role, "guest");
+});
+
 test("watch API rejects unsupported providers and oversized encrypted events", async () => {
   const inviteProof = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefgh123456";
-  const invalid = await request("rooms", { method: "POST", body: { inviteProof, displayName: "Host", provider: "pirate-stream" } });
+  const invalid = await request("rooms", { method: "POST", accessKey, body: { inviteProof, displayName: "Host", provider: "pirate-stream" } });
   assert.equal(invalid.status, 400);
-  const created = await (await request("rooms", { method: "POST", body: { inviteProof, displayName: "Host", provider: "netflix" } })).json();
+  const created = await (await request("rooms", { method: "POST", accessKey, body: { inviteProof, displayName: "Host", provider: "netflix" } })).json();
   const oversized = await request(`rooms/${created.roomId}/events`, { method: "POST", token: created.participantToken, body: { payload: `chat:${"x".repeat(65 * 1024)}` } });
   assert.equal(oversized.status, 413);
 });

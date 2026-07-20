@@ -107,6 +107,34 @@ returns `{"status":"ok",...}`. Optional: `wrangler secret put TURN_KEY_ID` and
 `TURN_KEY_API_TOKEN` (via `-c wrangler.watch.toml`) to enable TURN relay, and
 `npm run watch:tail` to stream worker logs.
 
+### Access model (private beta)
+
+Creating a room requires approved access; **joining an existing room through a
+shared invite link does not** — so an approved member can invite anyone. Visitors
+request access on `/watch-together` (name, email, reason). Emails on the
+auto-approve domain (default `trenith.com`) are granted a key instantly; everyone
+else is held for manual review and told credentials arrive within 24 hours if
+approved. The key is stored in the browser and sent as `x-watch-access` on room
+creation only.
+
+Optional worker configuration (set with `wrangler secret put <NAME> -c wrangler.watch.toml`):
+
+| Secret | Purpose |
+| --- | --- |
+| `WATCH_AUTO_APPROVE_DOMAIN` | Email domain approved instantly (default `trenith.com`) |
+| `WATCH_ADMIN_SECRET` | Enables the manual-approval endpoint below |
+| `RESEND_API_KEY` | Optional: email the access key / confirmation to requesters |
+| `WATCH_ACCESS_EMAIL_FROM` | Verified Resend sender for access emails |
+| `WATCH_ACCESS_EMAIL_TO` | Address notified of each new pending request |
+
+Approve a pending request manually (mints and returns/emails a key):
+
+```bash
+curl -X POST "$WATCH_SIGNAL_ORIGIN/api/watch/access/approve" \
+  -H "x-watch-admin: $WATCH_ADMIN_SECRET" -H "content-type: application/json" \
+  -d '{"email":"person@example.com"}'
+```
+
 Without a feedback delivery variable the widget still works: it offers the visitor a prefilled direct email instead of silently dropping the report.
 
 See [`docs/SEARCH-SETUP.md`](docs/SEARCH-SETUP.md) for the domain, Search Console, Bing, IndexNow and analytics launch sequence. See [`docs/OFFSITE-DISCOVERY.md`](docs/OFFSITE-DISCOVERY.md) for the compliant off-site SEO/AEO/GEO/AIO distribution plan.
