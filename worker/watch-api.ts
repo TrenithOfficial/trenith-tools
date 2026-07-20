@@ -422,6 +422,9 @@ function sendAccessEmail(ctx: WatchExecutionCtx | undefined, env: WatchApiEnv, t
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
         console.warn(`[watch-email] Resend ${res.status} from=${from} to=${to} :: ${detail.slice(0, 400)}`);
+      } else {
+        const body = await res.json().catch(() => ({})) as { id?: string };
+        console.log(`[watch-email] sent id=${body.id || "?"} from=${from} to=${to}`);
       }
     } catch (err) {
       console.warn(`[watch-email] Resend request threw for ${to}: ${err instanceof Error ? err.message : String(err)}`);
