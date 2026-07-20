@@ -40,6 +40,12 @@ export type WatchApiEnv = {
   WATCH_PROXY_SECRET?: string;          // shared with the Vercel proxy so it can assert the real client IP
 };
 
+// A minimal structural view of the Workers ExecutionContext. Declared here
+// rather than importing @cloudflare/workers-types so this module stays
+// importable by the Node test suite. Email delivery is registered with
+// waitUntil() so the Resend request is not cancelled when the Response returns.
+export type WatchExecutionCtx = { waitUntil(promise: Promise<unknown>): void };
+
 type ParticipantRow = {
   id: string;
   room_id: string;
@@ -396,15 +402,20 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 // Optional transactional email through Resend. Never throws into the request
 // path — a delivery failure must not fail the access request itself.
-async function sendAccessEmail(env: WatchApiEnv, to: string, subject: string, text: string): Promise<void> {
+// ctx is the first parameter so every call site shares the prefix
+// `sendAccessEmail(ctx, env, `. The Resend request is registered with
+// ctx.waitUntil() so the runtime keeps it alive past the Response; without that
+// a returned handler cancels the in-flight fetch and the email silently never
+// sends. No ctx (e.g. the Node tests) falls back to fire-and-forget, and any
+// delivery error is swallowed — email is always best-effort.
+function sendAccessEmail(ctx: WatchExecutionCtx | undefined, env: WatchApiEnv, to: string, subject: string, text: string): void {
   if (!env.RESEND_API_KEY || !to) return;
-  try {
-    await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
-      body: JSON.stringify({ from: env.WATCH_ACCESS_EMAIL_FROM || "Trenith Watch Together <onboarding@resend.dev>", to: [to], subject, text }),
-    });
-  } catch { /* delivery is best-effort */ }
+  const work = fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
+    body: JSON.stringify({ from: env.WATCH_ACCESS_EMAIL_FROM || "Trenith Watch Together <onboarding@resend.dev>", to: [to], subject, text }),
+  }).then(() => undefined).catch(() => undefined);
+  if (ctx) ctx.waitUntil(work); else void work;
 }
 
 // A room can only be created with an approved access key. Guests joining an
@@ -418,7 +429,7 @@ async function requireCreateAccess(request: Request, db: WatchD1): Promise<Respo
   return null;
 }
 
-async function requestAccess(request: Request, db: WatchD1, env: WatchApiEnv): Promise<Response> {
+async function requestAccess(request: Request, db: WatchD1, env: WatchApiEnv, ctx?: WatchExecutionCtx): Promise<Response> {
   const body = await readBody(request);
   const email = String(body.email || "").trim().toLowerCase().slice(0, 200);
   const displayName = normalizeDisplayName(body.displayName || body.name);
@@ -439,21 +450,21 @@ async function requestAccess(request: Request, db: WatchD1, env: WatchApiEnv): P
     await db.prepare(`INSERT INTO watch_access (id, email, display_name, reason, domain, key_hash, status, created_at, decided_at)
       VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?)`)
       .bind(randomId(12), email, displayName, reason || null, domain, await sha256(accessKey), now, now).run();
-    void sendAccessEmail(env, email, "Your Trenith Watch Together access", `You're approved. Your access key:\n\n${accessKey}\n\nKeep it private — it lets you create watch rooms on tools.trenith.com/watch-together.`);
+    sendAccessEmail(ctx, env, email, "Your Trenith Watch Together access", `You're approved. Your access key:\n\n${accessKey}\n\nKeep it private — it lets you create watch rooms on tools.trenith.com/watch-together.`);
     return json(request, { status: "approved", accessKey, message: "You're approved. Save this access key — it unlocks room creation." }, 201);
   }
 
   await db.prepare(`INSERT INTO watch_access (id, email, display_name, reason, domain, status, created_at)
     VALUES (?, ?, ?, ?, ?, 'pending', ?)`)
     .bind(randomId(12), email, displayName, reason || null, domain, now).run();
-  void sendAccessEmail(env, email, "Trenith Watch Together — access requested", "Thanks for requesting access to Trenith Watch Together. We review requests and, if approved, email your access credentials within 24 hours.");
-  void sendAccessEmail(env, env.WATCH_ACCESS_EMAIL_TO || "", "New Watch Together access request", `Email: ${email}\nName: ${displayName}\nReason: ${reason || "(none)"}`);
+  sendAccessEmail(ctx, env, email, "Trenith Watch Together — access requested", "Thanks for requesting access to Trenith Watch Together. We review requests and, if approved, email your access credentials within 24 hours.");
+  sendAccessEmail(ctx, env, env.WATCH_ACCESS_EMAIL_TO || "", "New Watch Together access request", `Email: ${email}\nName: ${displayName}\nReason: ${reason || "(none)"}`);
   return json(request, { status: "pending", message: "Thanks — we'll review your request and email your access credentials within 24 hours if approved." }, 202);
 }
 
 // Manual review path, protected by a shared admin secret. Approves a pending
 // email, mints its access key and (optionally) emails it.
-async function adminApprove(request: Request, db: WatchD1, env: WatchApiEnv): Promise<Response> {
+async function adminApprove(request: Request, db: WatchD1, env: WatchApiEnv, ctx?: WatchExecutionCtx): Promise<Response> {
   if (!env.WATCH_ADMIN_SECRET || (request.headers.get("x-watch-admin") || "") !== env.WATCH_ADMIN_SECRET) {
     return json(request, { error: "Not authorized." }, 401);
   }
@@ -464,11 +475,11 @@ async function adminApprove(request: Request, db: WatchD1, env: WatchApiEnv): Pr
   if (!pending) return json(request, { error: "No pending request for that email." }, 404);
   const accessKey = randomId(30);
   await db.prepare("UPDATE watch_access SET status = 'approved', key_hash = ?, decided_at = ? WHERE id = ?").bind(await sha256(accessKey), Date.now(), pending.id).run();
-  void sendAccessEmail(env, email, "Your Trenith Watch Together access is approved", `You're approved. Your access key:\n\n${accessKey}\n\nEnter it on tools.trenith.com/watch-together to create watch rooms.`);
+  sendAccessEmail(ctx, env, email, "Your Trenith Watch Together access is approved", `You're approved. Your access key:\n\n${accessKey}\n\nEnter it on tools.trenith.com/watch-together to create watch rooms.`);
   return json(request, { status: "approved", email, accessKey }, 200);
 }
 
-export async function handleWatchApi(request: Request, env: WatchApiEnv): Promise<Response> {
+export async function handleWatchApi(request: Request, env: WatchApiEnv, ctx?: WatchExecutionCtx): Promise<Response> {
   // A 204 response must have no body; Response.json() always writes one and
   // throws. Return a bodyless preflight with the CORS headers directly.
   if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: { ...corsHeaders(request), "access-control-max-age": "86400" } });
@@ -482,8 +493,8 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv): Promis
     }
     const path = new URL(request.url).pathname.replace(/^\/api\/watch\/?/, "");
     if (path === "health" && request.method === "GET") return json(request, { status: "ok", protocolVersion: WATCH_PROTOCOL_VERSION, serverTime: now });
-    if (path === "access" && request.method === "POST") return await rateLimit(request, env, "access", 6, 60 * 60 * 1000) || await requestAccess(request, env.DB, env);
-    if (path === "access/approve" && request.method === "POST") return await adminApprove(request, env.DB, env);
+    if (path === "access" && request.method === "POST") return await rateLimit(request, env, "access", 6, 60 * 60 * 1000) || await requestAccess(request, env.DB, env, ctx);
+    if (path === "access/approve" && request.method === "POST") return await adminApprove(request, env.DB, env, ctx);
     // Every handler below is awaited. Returning a bare promise from inside this
     // try block would let a rejection settle after the block exits, escaping the
     // catch entirely and surfacing an uncaught worker exception (HTTP 500 with a

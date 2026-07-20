@@ -31,7 +31,7 @@ const worker = {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/watch" || url.pathname.startsWith("/api/watch/")) {
-      return handleWatchApi(request, env);
+      return handleWatchApi(request, env, ctx);
     }
 
     if (url.pathname === "/_vinext/image") {
