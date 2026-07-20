@@ -409,12 +409,24 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 // sends. No ctx (e.g. the Node tests) falls back to fire-and-forget, and any
 // delivery error is swallowed — email is always best-effort.
 function sendAccessEmail(ctx: WatchExecutionCtx | undefined, env: WatchApiEnv, to: string, subject: string, text: string): void {
-  if (!env.RESEND_API_KEY || !to) return;
-  const work = fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
-    body: JSON.stringify({ from: env.WATCH_ACCESS_EMAIL_FROM || "Trenith Watch Together <onboarding@resend.dev>", to: [to], subject, text }),
-  }).then(() => undefined).catch(() => undefined);
+  if (!env.RESEND_API_KEY) { console.warn("[watch-email] skipped: RESEND_API_KEY not set"); return; }
+  if (!to) { console.warn("[watch-email] skipped: empty recipient (WATCH_ACCESS_EMAIL_TO unset?)"); return; }
+  const from = env.WATCH_ACCESS_EMAIL_FROM || "Trenith Watch Together <onboarding@resend.dev>";
+  const work = (async () => {
+    try {
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
+        body: JSON.stringify({ from, to: [to], subject, text }),
+      });
+      if (!res.ok) {
+        const detail = await res.text().catch(() => "");
+        console.warn(`[watch-email] Resend ${res.status} from=${from} to=${to} :: ${detail.slice(0, 400)}`);
+      }
+    } catch (err) {
+      console.warn(`[watch-email] Resend request threw for ${to}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  })();
   if (ctx) ctx.waitUntil(work); else void work;
 }
 
