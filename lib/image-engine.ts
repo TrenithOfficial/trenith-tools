@@ -11,7 +11,8 @@ export type ImageOutputFormat =
   | "image/webp"
   | "image/avif"
   | "image/bmp"
-  | "image/x-icon";
+  | "image/x-icon"
+  | "image/gif";
 
 export type LengthUnit = "px" | "in" | "cm" | "%";
 
@@ -22,6 +23,7 @@ export const OUTPUT_FORMATS: { value: ImageOutputFormat; label: string; ext: str
   { value: "image/avif", label: "AVIF", ext: "avif", lossy: true, opaque: false, native: true },
   { value: "image/bmp", label: "BMP", ext: "bmp", lossy: false, opaque: true, native: false },
   { value: "image/x-icon", label: "ICO", ext: "ico", lossy: false, opaque: false, native: false },
+  { value: "image/gif", label: "GIF", ext: "gif", lossy: false, opaque: true, native: false },
 ];
 
 export function formatMeta(format: ImageOutputFormat) {
@@ -200,12 +202,52 @@ export function extensionFor(format: ImageOutputFormat, actualType?: string): st
 
 export type ImageSource = ImageBitmap | HTMLImageElement;
 
+// Sniff the container by magic bytes (not filename, so it works for any Blob) to
+// route HEIC/HEIF and TIFF — which browsers can't decode natively, except Safari
+// for HEIC — to the on-demand decoders.
+async function sniffContainer(file: Blob): Promise<"heic" | "tiff" | "native"> {
+  const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if ((head[0] === 0x49 && head[1] === 0x49 && head[2] === 0x2a && head[3] === 0x00) ||
+      (head[0] === 0x4d && head[1] === 0x4d && head[2] === 0x00 && head[3] === 0x2a)) return "tiff";
+  if (head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) { // "ftyp"
+    const brand = String.fromCharCode(head[8], head[9], head[10], head[11]);
+    if (["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1", "heif"].includes(brand)) return "heic";
+  }
+  return "native";
+}
+
+async function decodeTiff(file: Blob): Promise<ImageSource> {
+  const buffer = await file.arrayBuffer();
+  const mod = await import("utif2");
+  const UTIF = (mod as unknown as { default?: typeof mod }).default ?? mod;
+  const ifds = UTIF.decode(buffer);
+  if (!ifds.length) throw new Error("This TIFF file has no readable image.");
+  UTIF.decodeImage(buffer, ifds[0]);
+  const rgba = UTIF.toRGBA8(ifds[0]);
+  const width = ifds[0].width;
+  const height = ifds[0].height;
+  if (!width || !height) throw new Error("This TIFF file could not be decoded.");
+  const pixels = new Uint8ClampedArray(rgba); // copy into an ArrayBuffer-backed clamped array
+  return await createImageBitmap(new ImageData(pixels, width, height));
+}
+
 // Decode a file to a drawable source. createImageBitmap decodes off the render
 // pipeline (keeps working in a backgrounded tab) and applies EXIF orientation so
-// phone photos come out upright; the element decoder is the fallback.
+// phone photos come out upright; the element decoder is the fallback. HEIC and
+// TIFF are handled by decoders loaded on demand, so their weight only ships when
+// such a file is actually opened.
 export async function decodeImage(file: Blob): Promise<ImageSource> {
+  const container = await sniffContainer(file);
+  if (container === "heic") {
+    // libheif's libde265 HEVC decoder (LGPL); decode only. The /csp entry avoids
+    // relying on unsafe-eval so it works under the site's Content-Security-Policy.
+    const { heicTo } = await import("heic-to/csp");
+    return await heicTo({ blob: file, type: "bitmap" });
+  }
+  if (container === "tiff") return await decodeTiff(file);
+
   if (typeof createImageBitmap === "function") {
-    try { return await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { /* fall through */ }
+    try { return await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { /* fall through to the element decoder */ }
   }
   const url = URL.createObjectURL(file);
   try {
@@ -255,6 +297,13 @@ export interface RenderOps {
 
 export interface RenderResult { blob: Blob; width: number; height: number; type: string; clamped: boolean }
 
+// The gifenc surface used by the GIF encode path (the package ships no types).
+type GifencModule = {
+  quantize(rgba: Uint8Array | Uint8ClampedArray, maxColors: number): number[][];
+  applyPalette(rgba: Uint8Array | Uint8ClampedArray, palette: number[][]): Uint8Array;
+  GIFEncoder(): { writeFrame(index: Uint8Array, width: number, height: number, options?: { palette?: number[][] }): void; finish(): void; bytes(): Uint8Array };
+};
+
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
   return new Promise((resolve, reject) =>
     canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error("The browser could not export this image."))), type, quality));
@@ -270,6 +319,24 @@ async function encodeCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingConte
     const png = await canvasToBlob(canvas, "image/png", 1);
     const ico = encodeIcoFromPng(new Uint8Array(await png.arrayBuffer()), canvas.width, canvas.height);
     return { blob: new Blob([ico as BlobPart], { type: "image/x-icon" }), type: "image/x-icon" };
+  }
+  if (format === "image/gif") {
+    // GIF is 256-colour indexed. The canvas is already background-flattened (GIF
+    // is an opaque format here), so 3-channel quantization is enough.
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    // gifenc ships no type declarations; type the small surface we use locally.
+    // @ts-expect-error gifenc has no bundled type declarations
+    const mod = (await import("gifenc")) as GifencModule & { default?: GifencModule };
+    // Prefer the named exports (the ESM build the bundler picks); only fall back
+    // to `default` when an interop layer nested them there.
+    const lib = (mod as { GIFEncoder?: unknown }).GIFEncoder ? mod : mod.default!;
+    const { GIFEncoder, quantize, applyPalette } = lib;
+    const palette = quantize(data.data, 256);
+    const index = applyPalette(data.data, palette);
+    const gif = GIFEncoder();
+    gif.writeFrame(index, canvas.width, canvas.height, { palette });
+    gif.finish();
+    return { blob: new Blob([gif.bytes() as BlobPart], { type: "image/gif" }), type: "image/gif" };
   }
   const blob = await canvasToBlob(canvas, format, quality);
   // toBlob silently falls back to PNG when it can't encode the type (older Safari

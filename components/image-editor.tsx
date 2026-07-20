@@ -45,6 +45,7 @@ export function ImageEditor({ slug }: { slug: string }) {
   const [bg, setBg] = useState("#ffffff");
 
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<{ url: string; filename: string; size: number; width: number; height: number } | null>(null);
 
@@ -54,7 +55,7 @@ export function ImageEditor({ slug }: { slug: string }) {
 
   // Load a chosen file: decode, reset the crop to the whole image.
   const loadFile = useCallback(async (file: File) => {
-    setError(""); setResult(null);
+    setError(""); setResult(null); setLoading(true);
     try {
       const decoded = await decodeImage(file);
       const { width, height } = sourceSize(decoded);
@@ -64,13 +65,10 @@ export function ImageEditor({ slug }: { slug: string }) {
       setCrop({ x: 0, y: 0, width, height });
       setResizeW(""); setResizeH(""); setRotate(0); setFlipH(false); setFlipV(false); setCropAspect(null);
     } catch {
-      const ext = (file.name.split(".").pop() || "").toLowerCase();
-      if (["heic", "heif", "tif", "tiff"].includes(ext)) {
-        setError(`${ext.toUpperCase()} decoding is being added in the next update. For now use JPG, PNG, WebP, GIF, BMP or AVIF.`);
-      } else {
-        setError("This file could not be opened as an image. Try a JPG, PNG, WebP, GIF, BMP or AVIF.");
-      }
+      setError("This file could not be opened as an image. Supported: JPG, PNG, WebP, GIF, BMP, AVIF, HEIC/HEIF and TIFF.");
       setSource(null);
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -189,12 +187,20 @@ export function ImageEditor({ slug }: { slug: string }) {
       <section className="workspace-panel editor-stage-panel">
         <div className="panel-heading-row"><div><span className="panel-label">EDIT</span><h2>{source ? "Crop, transform and export" : "Choose an image"}</h2></div>{source && <button className="text-button" onClick={() => { setSource(null); setResult(null); }}>Change image</button>}</div>
         {!source ? (
+          loading ? (
+            <div className="editor-dropzone">
+              <span className="editor-drop-icon" aria-hidden>◌</span>
+              <strong>Opening image…</strong>
+              <small>Decoding on your device. HEIC and TIFF load a small decoder the first time.</small>
+            </div>
+          ) : (
           <label className="editor-dropzone">
             <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,.tif,.tiff" onChange={(e) => e.target.files?.[0] && loadFile(e.target.files[0])} />
             <span className="editor-drop-icon" aria-hidden>⤓</span>
             <strong>Choose an image or drag one here</strong>
-            <small>JPG, PNG, WebP, GIF, BMP, AVIF · processed on your device, never uploaded</small>
+            <small>JPG, PNG, WebP, GIF, BMP, AVIF, HEIC and TIFF · processed on your device, never uploaded</small>
           </label>
+          )
         ) : (
           <div className="editor-stage" ref={stageRef} style={{ width: dispW, height: dispH }} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerLeave={onPointerUp}>
             <canvas ref={canvasRef} className="editor-canvas" />

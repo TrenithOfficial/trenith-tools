@@ -92,7 +92,7 @@ export const tools: ToolDefinition[] = [
   },
   {
     slug: "image-editor", name: "Image Editor", shortName: "Image Editor", category: "Image", kind: "device", icon: "✦", accent: "violet",
-    description: "Crop, resize, rotate and convert images on your device with exact px, inch, cm or percent dimensions and high-quality resampling.", formats: ["JPG", "PNG", "WebP", "AVIF", "BMP", "ICO", "and more"],
+    description: "Crop, resize, rotate and convert images on your device — opens HEIC, TIFF, JPG, PNG, WebP, GIF, BMP and AVIF, with exact px, inch, cm or percent dimensions and high-quality resampling.", formats: ["JPG", "PNG", "WebP", "AVIF", "GIF", "BMP", "ICO", "HEIC", "TIFF"],
     steps: ["Choose an image", "Crop, resize, rotate or flip with clear dimensions", "Pick a format and export"],
   },
   {
@@ -107,7 +107,7 @@ export const tools: ToolDefinition[] = [
   },
   {
     slug: "image-converter", name: "Image Converter", shortName: "Image Converter", category: "Image", kind: "device", icon: "⇄", accent: "violet",
-    description: "Convert images between JPG, PNG, WebP, AVIF, BMP and ICO at full resolution, entirely in your browser.", formats: ["JPG", "PNG", "WebP", "AVIF", "BMP", "ICO"],
+    description: "Convert images to JPG, PNG, WebP, AVIF, GIF, BMP or ICO at full resolution — opens HEIC and TIFF too, entirely in your browser.", formats: ["JPG", "PNG", "WebP", "AVIF", "GIF", "BMP", "ICO", "HEIC", "TIFF"],
     steps: ["Choose an image", "Select the output format and quality", "Convert and download"],
   },
   {
