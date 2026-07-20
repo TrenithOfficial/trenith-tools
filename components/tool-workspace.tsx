@@ -6,6 +6,7 @@ import { ToolDefinition } from "../lib/catalog";
 import { MetadataScrubber } from "./metadata-scrubber";
 import { SeoUtility } from "./seo-tools";
 import { DevUtility } from "./dev-tools";
+import { ImageEditor } from "./image-editor";
 import {
   changeAudioVolume,
   downloadBlob,
@@ -62,6 +63,7 @@ export function ToolWorkspace({ tool }: { tool: ToolDefinition }) {
   if (["tap-bpm", "bpm-delay-calculator", "note-frequency", "metronome"].includes(tool.slug)) return <MusicUtility slug={tool.slug} />;
   if (tool.category === "SEO") return <SeoUtility slug={tool.slug} />;
   if (tool.category === "Developer") return <DevUtility slug={tool.slug} />;
+  if (tool.category === "Image") return <ImageEditor slug={tool.slug} />;
   return <FileWorkspace tool={tool} />;
 }
 

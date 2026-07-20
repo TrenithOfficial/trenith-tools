@@ -91,19 +91,24 @@ export const tools: ToolDefinition[] = [
     steps: ["Choose JPG or PNG images", "Arrange the page order", "Create and download the PDF"],
   },
   {
+    slug: "image-editor", name: "Image Editor", shortName: "Image Editor", category: "Image", kind: "device", icon: "✦", accent: "violet",
+    description: "Crop, resize, rotate and convert images on your device with exact px, inch, cm or percent dimensions and high-quality resampling.", formats: ["JPG", "PNG", "WebP", "AVIF", "BMP", "ICO", "and more"],
+    steps: ["Choose an image", "Crop, resize, rotate or flip with clear dimensions", "Pick a format and export"],
+  },
+  {
     slug: "image-compressor", name: "Image Compressor", shortName: "Compress Image", category: "Image", kind: "device", icon: "◫", accent: "lime",
-    description: "Reduce JPG, PNG or WebP dimensions and quality with an instant on-device preview and export.", formats: ["JPG", "PNG", "WebP"],
-    steps: ["Choose an image", "Set width, format and quality", "Export the optimized image"],
+    description: "Shrink image size with a live preview, high-quality resampling and a quality slider — crop and resize in the same editor.", formats: ["JPG", "PNG", "WebP", "AVIF"],
+    steps: ["Choose an image", "Set the size, format and quality", "Export the optimized image"],
   },
   {
     slug: "image-resizer", name: "Image Resizer", shortName: "Resize Image", category: "Image", kind: "device", icon: "↔", accent: "cyan",
-    description: "Set a maximum width while preserving the original aspect ratio and image privacy.", formats: ["JPG", "PNG", "WebP"],
-    steps: ["Choose an image", "Enter the maximum width", "Download the resized file"],
+    description: "Resize to exact width and height in px, inch, cm or percent with a DPI, aspect lock and crisp stepped resampling.", formats: ["JPG", "PNG", "WebP", "AVIF"],
+    steps: ["Choose an image", "Enter exact dimensions and units", "Download the resized file"],
   },
   {
     slug: "image-converter", name: "Image Converter", shortName: "Image Converter", category: "Image", kind: "device", icon: "⇄", accent: "violet",
-    description: "Convert compatible images to JPG, PNG or WebP directly in the browser.", formats: ["JPG", "PNG", "WebP"],
-    steps: ["Choose an image", "Select the output format", "Convert and download"],
+    description: "Convert images between JPG, PNG, WebP, AVIF, BMP and ICO at full resolution, entirely in your browser.", formats: ["JPG", "PNG", "WebP", "AVIF", "BMP", "ICO"],
+    steps: ["Choose an image", "Select the output format and quality", "Convert and download"],
   },
   {
     slug: "tap-bpm", name: "Tap BPM", shortName: "Tap BPM", category: "Music", kind: "device", icon: "♩", accent: "rose",
