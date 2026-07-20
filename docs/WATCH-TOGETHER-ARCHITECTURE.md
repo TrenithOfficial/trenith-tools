@@ -121,7 +121,8 @@ For more than six cameras, simulcast, moderation or recording, migrate media to 
 - No account reduces stored identity but means invitation possession is the primary access factor.
 - Share links privately; anyone with the complete link can join until capacity/expiry.
 - Camera and microphone are off by default and controlled per participant.
-- The server cannot inspect end-to-end encrypted chat for moderation. The beta relies on invite-only rooms, short TTLs, host termination, capacity limits and API rate controls. Before broad public promotion, add per-IP/room creation throttles and abuse-report metadata that does not require plaintext chat access.
+- Room creation is access-gated: a requester submits their details and is either auto-approved (email on the `WATCH_AUTO_APPROVE_DOMAIN`, default `trenith.com`) or held for manual review, with access keys issued out of band ("reviewed within 24 hours if approved"). Joining a room is deliberately open to anyone holding a valid invitation, so a trenith host can share a link with non-trenith guests. It is a free, non-commercial, invitation-only private beta — not sold or promoted — which is the primary basis for keeping the OTT-sync surface low-risk.
+- The server cannot inspect end-to-end encrypted chat for moderation. The beta relies on the creation access gate (approved requesters only), invite-only joining, short TTLs, host termination, capacity limits, and per-caller API rate controls — the Vercel proxy forwards the real client IP under a shared secret (`WATCH_PROXY_SECRET`) so limits attribute to the caller rather than the proxy address. Still open before broad public promotion: abuse-report metadata that does not require plaintext chat access.
 - WebRTC peers can expose network addresses to other peers. TURN availability improves connectivity; relay-only mode should be an optional privacy setting once TURN capacity is funded.
 - Legal disclosures explicitly cover playback activity, extension permission, encrypted room data and WebRTC media.
 
@@ -158,11 +159,13 @@ Release artifacts are generated with `npm run zip:extension`. Store publishing r
 
 ## Required deployment configuration
 
-1. Sites project: D1 binding named `DB` (declared in `.openai/hosting.json`). Apply `drizzle/0000_smiling_lucky_pierre.sql` if the platform does not apply generated migrations automatically.
-2. Global/India Vercel projects: `WATCH_SIGNAL_ORIGIN` set to the public Cloudflare/Sites deployment that owns D1.
-3. Recommended: create a scoped Cloudflare Realtime TURN key and set `TURN_KEY_ID` plus `TURN_KEY_API_TOKEN` only in the Sites runtime.
-4. Connect `tools.trenith.com` and `tools.trenith.in`, then verify bridge matches in the signed extension.
-5. Create Chrome Web Store and AMO listings with privacy policy URL `https://tools.trenith.com/privacy` and support URL `https://tools.trenith.com/watch-together/supported`.
+1. Signaling Worker: deploy with `npm run watch:deploy` (config in `wrangler.watch.toml`, D1 binding named `DB`). The Worker self-provisions its schema, including the `watch_access` table, on first request.
+2. Global/India Vercel projects: `WATCH_SIGNAL_ORIGIN` set to the public Worker origin that owns D1.
+3. Access gate (Worker secrets, `wrangler secret put … --config wrangler.watch.toml`): set `WATCH_ADMIN_SECRET` to approve non-auto-approved requests via `POST /api/watch/access/approve` (`x-watch-admin` header). Optional: `WATCH_AUTO_APPROVE_DOMAIN` (defaults to `trenith.com`); `RESEND_API_KEY` + `WATCH_ACCESS_EMAIL_FROM` + `WATCH_ACCESS_EMAIL_TO` to email issued keys and pending-request notices. All are optional — unset means the gate still works, it just cannot auto-email keys.
+4. Per-caller rate limiting: set the same `WATCH_PROXY_SECRET` value as a Worker secret and as a Vercel env var so the proxy's asserted client IP is trusted; without it the Worker falls back to `cf-connecting-ip`.
+5. Recommended: create a scoped Cloudflare Realtime TURN key and set `TURN_KEY_ID` plus `TURN_KEY_API_TOKEN` only in the Sites runtime.
+6. Connect `tools.trenith.com` and `tools.trenith.in`, then verify bridge matches in the signed extension.
+7. Create Chrome Web Store and AMO listings with privacy policy URL `https://tools.trenith.com/privacy` and support URL `https://tools.trenith.com/watch-together/supported`.
 
 ## Provider verification matrix
 
@@ -175,6 +178,14 @@ Every release candidate must record date, browser, provider region, title type, 
 - Phase 2 — public beta: signed Chrome/Edge/Firefox listings, provider status telemetry with consent, abuse throttling and incident runbook.
 - Phase 3 — reliability: WebSocket/Durable Object signaling, host transfer, relay-only privacy option, richer provider adapters.
 - Phase 4 — scale: SFU for larger media rooms, moderation controls and native companion feasibility research. No native-app claim before platform partnerships or supported deep-link/control APIs exist.
+
+## Deferred engineering decisions
+
+These were surfaced by the audit and are deliberately held, not forgotten. Each is deferred because it needs infrastructure that is not yet provisioned, or carries a breakage risk that cannot be verified away without live iteration. Doing them blind would be worse than doing them when the prerequisite exists.
+
+- **CSP nonces on script-src.** The current policy allows `'unsafe-inline'` for scripts. Removing it requires a per-request nonce generated in middleware and threaded onto every inline script — Next's own hydration bootstrap, the consent-gated `gtag` loader, and `@vercel/analytics`. Getting it wrong blocks Next's bootstrap script and renders a blank page, and the failure only shows up at runtime, so it needs iterative live CSP-violation testing across all three script sources. Prerequisite: a dedicated pass with a deployed preview to watch the console. Until then the policy is documented as-is rather than half-migrated.
+- **Distributed rate limiter for the Vercel tool routes.** `lib/rate-limit.ts` is a synchronous per-isolate in-memory limiter. A cross-isolate limiter needs a KV/Redis store (Vercel KV / Upstash) that Sai has not provisioned, and would turn `allowRequest` async — rippling through every route handler and test and adding a fail-open path when the store is unreachable. The highest-abuse-risk surface, Watch Together signaling, already uses a durable D1-backed limiter, so the marginal benefit here is small relative to the added failure surface. Prerequisite: provisioned KV + a decision to accept the async refactor.
+- **WebSocket / Durable Object signaling.** Signaling currently rides HTTP short-polling. Moving to WebSocket + Durable Objects is Phase 3 reliability work (see Rollout), not a bug fix: it is a transport rewrite with its own reconnection, DO-lifecycle and migration testing burden. It should be planned and tested as its own phase, not bolted on during a hardening pass.
 
 ## Success metrics
 
