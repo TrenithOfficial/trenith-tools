@@ -2,7 +2,8 @@
 
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useDialogFocus } from "../lib/use-dialog-focus";
 
 type Consent = {
   version: 1;
@@ -91,6 +92,7 @@ export function ConsentManager() {
   const [consent, setConsent] = useState<Consent | null>(null);
   const [ready, setReady] = useState(false);
   const [open, setOpen] = useState(false);
+  const panelRef = useRef<HTMLElement>(null);
   const [customize, setCustomize] = useState(false);
   const [analytics, setAnalytics] = useState(false);
   const [marketing, setMarketing] = useState(false);
@@ -134,10 +136,14 @@ export function ConsentManager() {
     setCustomize(false);
   }
 
+  // Escape declines the optional categories rather than dismissing silently, so
+  // closing the banner can never be mistaken for consent.
+  useDialogFocus(ready && open, panelRef, () => save({ analytics: false, marketing: false, preferences: false }));
+
   return <>
     {ready && consent?.analytics && <><Analytics /><SpeedInsights /></>}
     {ready && open && <div className="consent-backdrop" role="presentation">
-      <section className="consent-panel" role="dialog" aria-modal="true" aria-labelledby="consent-title">
+      <section className="consent-panel" role="dialog" aria-modal="true" aria-labelledby="consent-title" ref={panelRef} tabIndex={-1}>
         <div className="consent-signal"><span>PRIVACY CONTROL</span><i /></div>
         <h2 id="consent-title">Useful analytics. Your choice.</h2>
         <p>Necessary storage keeps this site working. With permission, analytics helps Trenith improve free tools and understand which workflows lead people to our services. We do not sell personal data, file contents, API keys, prompts or outputs.</p>

@@ -1,7 +1,8 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useCallback, useRef, useState } from "react";
+import { useDialogFocus } from "../lib/use-dialog-focus";
 
 const categories = [
   ["problem", "Problem"],
@@ -41,6 +42,10 @@ export function FeedbackWidget() {
   function reset() {
     setState("form"); setError(""); setMessage(""); setEmail(""); setCopied(false);
   }
+
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closePanel = useCallback(() => { setOpen(false); reset(); }, []);
+  useDialogFocus(open, panelRef, closePanel);
 
   async function copyFeedback() {
     try {
@@ -82,9 +87,9 @@ export function FeedbackWidget() {
   }
 
   return <div className="feedback-widget">
-    {open && <button type="button" className="feedback-scrim" aria-label="Close feedback" onClick={() => { setOpen(false); reset(); }} />}
-    {open && <div className="feedback-panel workspace-panel" role="dialog" aria-modal="true" aria-label="Send feedback">
-      <div className="feedback-head"><strong>Help improve Trenith Tools</strong><button type="button" onClick={() => { setOpen(false); reset(); }} aria-label="Close feedback"><CloseIcon /></button></div>
+    {open && <button type="button" className="feedback-scrim" aria-label="Close feedback" onClick={closePanel} />}
+    {open && <div className="feedback-panel workspace-panel" role="dialog" aria-modal="true" aria-label="Send feedback" ref={panelRef} tabIndex={-1}>
+      <div className="feedback-head"><strong>Help improve Trenith Tools</strong><button type="button" onClick={closePanel} aria-label="Close feedback"><CloseIcon /></button></div>
 
       {state === "delivered" && <div className="feedback-done"><span>✓</span><p>Thank you. Your note reached the team and directly shapes what gets fixed and built next.</p><button type="button" className="secondary-button" onClick={reset}>Send another</button></div>}
 
