@@ -58,7 +58,10 @@ export default defineBackground(() => {
       if (!/^https?:$/.test(url.protocol)) return { installed: true, connected: false, error: "This browser page cannot be connected." } satisfies ConnectionStatus;
       if (/trenith\.(com|in)$/.test(url.hostname) || url.hostname === "trenith-tools.vercel.app" || url.hostname === "localhost" || url.hostname === "127.0.0.1") return { installed: true, connected: false, error: "Switch to the OTT playback tab before connecting." } satisfies ConnectionStatus;
       const originPattern = `${url.origin}/*`;
-      const granted = await browser.permissions.request({ origins: [originPattern] });
+      // Firefox only allows permissions.request() from a user gesture in the
+      // popup, so the popup requests it before sending this message; here we only
+      // verify the grant is present and never trigger a request from the worker.
+      const granted = await browser.permissions.contains({ origins: [originPattern] });
       if (!granted) return { installed: true, connected: false, error: "Site access was not granted. Trenith cannot control this player without it." } satisfies ConnectionStatus;
       try {
         await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["player-injected.js"] });
