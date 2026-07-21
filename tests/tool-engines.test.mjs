@@ -56,10 +56,10 @@ test("audio conversion profiles expose six concrete encoders", () => {
   assert.equal(audioProfiles.flac.lossless, true);
 });
 
-test("catalog publishes 48 unique tools including the free SEO and Developer utilities", async () => {
+test("catalog publishes 49 unique tools including the free SEO and Developer utilities", async () => {
   const { tools, categories } = await import("../lib/catalog.ts");
-  assert.equal(tools.length, 48);
-  assert.equal(new Set(tools.map((tool) => tool.slug)).size, 48);
+  assert.equal(tools.length, 49);
+  assert.equal(new Set(tools.map((tool) => tool.slug)).size, 49);
   const serp = tools.find((tool) => tool.slug === "serp-snippet-preview");
   const density = tools.find((tool) => tool.slug === "keyword-density-analyzer");
   assert.equal(serp?.kind, "device");
