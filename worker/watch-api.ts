@@ -543,6 +543,18 @@ async function rejectById(db: WatchD1, id: string): Promise<{ ok: true; email: s
   return { ok: true, email: existing.email };
 }
 
+async function reissueById(db: WatchD1, env: WatchApiEnv, ctx: WatchExecutionCtx | undefined, id: string): Promise<{ ok: true; email: string } | { ok: false; error: string; code: number }> {
+  const existing = await db.prepare("SELECT id, email, status FROM watch_access WHERE id = ? LIMIT 1").bind(id).first<{ id: string; email: string; status: string }>();
+  if (!existing) return { ok: false, error: "That request no longer exists.", code: 404 };
+  if (existing.status !== "approved") return { ok: false, error: "Only approved requests can have a key re-issued.", code: 409 };
+  // Keys are stored only as a hash, so a lost/never-delivered key can't be
+  // recovered — mint a fresh one, replacing the old hash, and email it.
+  const accessKey = randomId(30);
+  await db.prepare("UPDATE watch_access SET key_hash = ?, decided_at = ? WHERE id = ?").bind(await sha256(accessKey), Date.now(), id).run();
+  sendAccessEmail(ctx, env, existing.email, "Your new Trenith Watch Together access key", `Here is your access key:\n\n${accessKey}\n\nEnter it on tools.trenith.com/watch-together to create watch rooms. It replaces any previous key.`);
+  return { ok: true, email: existing.email };
+}
+
 // A room can only be created with an approved access key. Guests joining an
 // existing room via an invitation link do NOT pass through here, so a shared
 // link keeps working for people outside the approved audience.
@@ -626,6 +638,20 @@ async function adminReject(request: Request, db: WatchD1, env: WatchApiEnv): Pro
   return json(request, { status: "rejected", email }, 200);
 }
 
+// Re-issue a fresh access key for an already-approved email (lost or never
+// delivered) and email it. Admin-gated; used by Trenith HQ.
+async function adminReissue(request: Request, db: WatchD1, env: WatchApiEnv, ctx?: WatchExecutionCtx): Promise<Response> {
+  if (!isAdmin(request, env)) return json(request, { error: "Not authorized." }, 401);
+  const body = await readBody(request);
+  const email = String(body.email || "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return json(request, { error: "Enter a valid email address." }, 400);
+  const approved = await db.prepare("SELECT id FROM watch_access WHERE email = ? AND status = 'approved' ORDER BY decided_at DESC, created_at DESC LIMIT 1").bind(email).first<{ id: string }>();
+  if (!approved) return json(request, { error: "No approved request for that email." }, 404);
+  const result = await reissueById(db, env, ctx, approved.id);
+  if (!result.ok) return json(request, { error: result.error }, result.code);
+  return json(request, { status: "reissued", email }, 200);
+}
+
 // Read-only list of requests for Trenith HQ to mirror and display.
 async function accessList(request: Request, db: WatchD1, env: WatchApiEnv): Promise<Response> {
   if (!isAdmin(request, env)) return json(request, { error: "Not authorized." }, 401);
@@ -676,6 +702,7 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv, ctx?: W
     if (path === "access" && request.method === "POST") return await rateLimit(request, env, "access", 6, 60 * 60 * 1000) || await requestAccess(request, env.DB, env, ctx);
     if (path === "access/approve" && request.method === "POST") return await adminApprove(request, env.DB, env, ctx);
     if (path === "access/reject" && request.method === "POST") return await adminReject(request, env.DB, env);
+    if (path === "access/reissue" && request.method === "POST") return await adminReissue(request, env.DB, env, ctx);
     if (path === "access/list" && request.method === "GET") return await accessList(request, env.DB, env);
     if (path === "access/action" && request.method === "POST") return await rateLimit(request, env, "access-action", 40, 60 * 60 * 1000) || await accessAction(request, env.DB, env, ctx);
     // Every handler below is awaited. Returning a bare promise from inside this

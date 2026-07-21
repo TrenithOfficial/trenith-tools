@@ -161,3 +161,18 @@ test("access review: admin list, admin reject, and signed-token approve", async 
   assert.equal(rej.status, 200);
   assert.equal((await rej.json()).status, "rejected");
 });
+
+
+test("access reissue: mints a fresh key for an approved email, 404 otherwise", async () => {
+  // Seed an approved grant directly — the /access endpoint is rate-limited and
+  // the other concurrent tests exhaust it against this shared in-memory DB.
+  environment.DB.sqlite
+    .prepare("INSERT INTO watch_access (id, email, display_name, reason, domain, key_hash, status, created_at, decided_at) VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?)")
+    .run("reissue-seed-1", "reissue@trenith.com", "Re Issue", null, "trenith.com", "oldhash", Date.now(), Date.now());
+  const ok = await request("access/reissue", { method: "POST", admin: ADMIN_SECRET, body: { email: "reissue@trenith.com" } });
+  assert.equal(ok.status, 200);
+  assert.equal((await ok.json()).status, "reissued");
+  const miss = await request("access/reissue", { method: "POST", admin: ADMIN_SECRET, body: { email: "nobody-here@example.com" } });
+  assert.equal(miss.status, 404);
+  assert.equal((await request("access/reissue", { method: "POST", body: { email: "reissue@trenith.com" } })).status, 401);
+});
