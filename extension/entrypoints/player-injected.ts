@@ -79,7 +79,17 @@ export default defineUnlistedScript(() => {
     sendStatus("PLAYER_READY");
   };
 
-  const observer = new MutationObserver(attach);
+  // attach() walks every element in the document (and every shadow root) to find
+  // the player, so running it on each mutation is ruinous: Netflix rewrites its
+  // DOM continuously during playback, which turned this into a full-document
+  // scan many times a second and froze the tab. Only re-scan when the attached
+  // player actually went away or a new media element appeared.
+  const observer = new MutationObserver((records) => {
+    const mediaAppeared = records.some((record) => Array.from(record.addedNodes).some((node) =>
+      node instanceof HTMLMediaElement || (node instanceof Element && node.querySelector("video,audio"))));
+    if (attached?.isConnected && !mediaAppeared) return;
+    attach();
+  });
   observer.observe(document.documentElement, { subtree: true, childList: true });
   attach();
   const timer = window.setInterval(() => { attach(); sendStatus(); }, 3000);

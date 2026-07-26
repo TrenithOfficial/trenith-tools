@@ -25,9 +25,16 @@ export default defineContentScript({
           if (status?.connected) emit("player-status", status);
         });
       } else if (command === "connect-player") {
-        void browser.runtime.sendMessage({ type: "OPEN_POPUP" } satisfies ExtensionMessage);
+        // Relay the outcome. When the popup cannot be opened programmatically
+        // the room needs to tell the user to click the toolbar icon; silently
+        // dropping this made the button look dead.
+        void browser.runtime.sendMessage({ type: "OPEN_POPUP" } satisfies ExtensionMessage)
+          .then((result) => emit("connect-help", result))
+          .catch(() => emit("connect-help", { opened: false, error: "Open your streaming tab, then click the Trenith icon in the browser toolbar to connect it." }));
       } else if (command === "apply-playback") {
-        void browser.runtime.sendMessage({ type: "APPLY_PLAYBACK", payload: event.data.payload } satisfies ExtensionMessage);
+        void browser.runtime.sendMessage({ type: "APPLY_PLAYBACK", payload: event.data.payload } satisfies ExtensionMessage)
+          .then((result) => emit("playback-result", result))
+          .catch(() => emit("playback-result", { applied: false, error: "The companion could not reach the connected streaming tab." }));
       }
     });
 

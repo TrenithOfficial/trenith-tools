@@ -2,19 +2,18 @@ import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
 import type { ConnectionStatus, ExtensionMessage, PlayerStatus } from "../lib/messages";
 
-const TOOL_URLS = [
-  "https://tools.trenith.com/*",
-  "https://tools.trenith.in/*",
-  "https://trenith-tools.vercel.app/*",
-  "http://localhost/*",
-  "http://127.0.0.1/*",
-];
-
 let playerTabId: number | undefined;
 let lastStatus: PlayerStatus | undefined;
 
 async function sendToRoom(message: unknown) {
-  const tabs = await browser.tabs.query({ url: TOOL_URLS });
+  // Filtering with tabs.query({url}) requires the "tabs" permission or host
+  // permissions for the page; this extension deliberately requests neither, so
+  // the room tab could never match and every player update was dropped before
+  // it left the worker. Query unfiltered instead and let delivery do the
+  // filtering: only this extension's own declared content script listens, and
+  // tabs without it reject with "Could not establish connection", which
+  // allSettled absorbs. No extra permission, so no new install warning.
+  const tabs = await browser.tabs.query({});
   await Promise.allSettled(tabs.filter((tab) => tab.id != null).map((tab) => browser.tabs.sendMessage(tab.id!, message)));
 }
 
@@ -33,7 +32,7 @@ async function connectionStatus(): Promise<ConnectionStatus> {
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
-    void browser.storage.local.set({ trenithWatchVersion: "1.0.0" });
+    void browser.storage.local.set({ trenithWatchVersion: "1.0.2" });
   });
 
   browser.tabs.onRemoved.addListener((tabId) => {
@@ -47,10 +46,12 @@ export default defineBackground(() => {
   browser.runtime.onMessage.addListener((raw: unknown, sender) => {
     const message = raw as ExtensionMessage;
     if (message.type === "GET_STATUS") return connectionStatus();
-    if (message.type === "OPEN_POPUP") {
-      void browser.action.openPopup().catch(() => undefined);
-      return Promise.resolve({ opened: true });
-    }
+    // Chrome only opens the popup for a gesture made in the extension's own UI,
+    // so a click on the room page usually cannot open it. Report that honestly
+    // instead of claiming success and leaving the page with nothing to show.
+    if (message.type === "OPEN_POPUP") return browser.action.openPopup()
+      .then(() => ({ opened: true }))
+      .catch(() => ({ opened: false, error: "Open your streaming tab, then click the Trenith icon in the browser toolbar to connect it." }));
     if (message.type === "CONNECT_CURRENT_TAB") return (async () => {
       const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
       if (!tab?.id || !tab.url) return { installed: true, connected: false, error: "Open the OTT playback tab, then try again." } satisfies ConnectionStatus;
