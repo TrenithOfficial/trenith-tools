@@ -40,6 +40,10 @@ export function WatchRoom({ roomId }: { roomId: string }) {
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [micOn, setMicOn] = useState(false);
+  // Which device is waiting on the browser permission prompt. Without this the
+  // button gave no feedback at all while the prompt sat unanswered, which reads
+  // as "the microphone is broken".
+  const [mediaPending, setMediaPending] = useState<"audio" | "video" | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [relayAvailable, setRelayAvailable] = useState(false);
@@ -219,8 +223,14 @@ export function WatchRoom({ roomId }: { roomId: string }) {
 
   useEffect(() => {
     if (!credentials || participants.length > WATCH_MEDIA_PARTICIPANT_LIMIT) return;
+    // Every participant holds a peer record for every other participant. The
+    // previous id-ordering meant the higher-id side created no peers at all, so
+    // when that side enabled a microphone or camera the track was added to
+    // nothing and nobody ever heard or saw them. Creating both sides is safe:
+    // a trackless connection never fires negotiationneeded, and the polite/
+    // impolite rollback in handleSignal already resolves simultaneous offers.
     for (const participant of participants) {
-      if (participant.id !== credentials.session.participantId && credentials.session.participantId < participant.id) ensurePeer(participant.id);
+      if (participant.id !== credentials.session.participantId) ensurePeer(participant.id);
     }
   }, [credentials, ensurePeer, participants]);
 
@@ -228,6 +238,19 @@ export function WatchRoom({ roomId }: { roomId: string }) {
     function receive(event: MessageEvent<BridgeMessage>) {
       if (event.source !== window || event.data?.source !== "TRENITH_WATCH_EXTENSION") return;
       if (event.data.type === "extension-ready") setExtensionState("ready");
+      // The companion answers "Connect streaming tab" with guidance instead of
+      // opening its popup (Chrome refuses action.openPopup() without a user
+      // gesture in the extension's own UI). Surface that answer — dropping it
+      // is what made the button look dead.
+      if (event.data.type === "connect-help") {
+        const payload = (event.data.payload || {}) as { opened?: boolean; error?: string };
+        if (!payload.opened) setError(payload.error || "Open your streaming tab, then click the Trenith extension icon to connect it.");
+      }
+      if (event.data.type === "playback-result") {
+        const payload = (event.data.payload || {}) as { applied?: boolean; error?: string };
+        if (payload.applied === false && payload.error) setError(payload.error);
+      }
+      if (event.data.type === "player-disconnected") setExtensionState("ready");
       if (event.data.type === "player-status") {
         setExtensionState("player");
         const payload = event.data.payload || {};
@@ -262,17 +285,36 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         void broadcast({ type: "media-state", microphone: kind === "audio" ? currentTrack.enabled : micOn, camera: kind === "video" ? currentTrack.enabled : cameraOn });
         return;
       }
+      setMediaPending(kind);
       const media = await navigator.mediaDevices.getUserMedia({ audio: kind === "audio", video: kind === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false });
       const stream = existing || new MediaStream();
-      for (const track of media.getTracks()) {
-        stream.addTrack(track);
-        for (const record of peersRef.current.values()) record.connection.addTrack(track, stream);
+      for (const track of media.getTracks()) stream.addTrack(track);
+      // Publish to the ref synchronously: ensurePeer() reads localStreamRef when
+      // it builds a connection, and the state effect that syncs it has not run
+      // yet, so a peer created in this same tick would otherwise get no tracks.
+      localStreamRef.current = stream;
+      for (const participant of participantsRef.current) {
+        if (participant.id === credentials?.session.participantId) continue;
+        const record = ensurePeer(participant.id);
+        for (const track of media.getTracks()) {
+          // addTrack throws InvalidAccessError if the same track is added twice.
+          if (!record.connection.getSenders().some((sender) => sender.track === track)) record.connection.addTrack(track, stream);
+        }
       }
       setLocalStream(stream);
       if (kind === "audio") setMicOn(true); else setCameraOn(true);
       void broadcast({ type: "media-state", microphone: kind === "audio" ? true : micOn, camera: kind === "video" ? true : cameraOn });
     } catch (caught) {
-      setMediaError(caught instanceof DOMException && caught.name === "NotAllowedError" ? "Camera or microphone permission was denied. You can change it in the browser site controls." : "This device could not start the requested camera or microphone.");
+      const device = kind === "audio" ? "microphone" : "camera";
+      const name = caught instanceof DOMException ? caught.name : "";
+      setMediaError(
+        name === "NotAllowedError" ? `Access to your ${device} was blocked. Click the camera/microphone icon in the browser address bar to allow it — on macOS also check System Settings → Privacy & Security → ${kind === "audio" ? "Microphone" : "Camera"} for your browser.`
+        : name === "NotFoundError" || name === "OverconstrainedError" ? `No ${device} was found on this device.`
+        : name === "NotReadableError" ? `Your ${device} is already in use by another app. Close the other app, then try again.`
+        : `This device could not start the ${device}.`,
+      );
+    } finally {
+      setMediaPending(null);
     }
   }
 
@@ -329,7 +371,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
             {Object.entries(remoteStreams).map(([participantId, stream]) => { const participant = participants.find((item) => item.id === participantId); return <div className="watch-video-tile" key={participantId}><WatchVideo stream={stream} label={`${participant?.displayName || "Guest"} camera`} /><footer><span>{participant?.displayName || "Guest"}</span><small>Connected</small></footer></div>; })}
             {participants.filter((item) => item.id !== credentials.session.participantId && !remoteStreams[item.id]).slice(0, 5).map((participant) => <div className="watch-video-tile" key={participant.id}><div className="watch-avatar">{initials(participant.displayName)}</div><footer><span>{participant.displayName}</span><small>Camera off</small></footer></div>)}
           </div>
-          <div className="watch-media-controls"><button className={micOn ? "active" : ""} onClick={() => void addMedia("audio")}><span>{micOn ? "●" : "○"}</span>{micOn ? "Mute" : "Microphone"}</button><button className={cameraOn ? "active" : ""} onClick={() => void addMedia("video")}><span>▣</span>{cameraOn ? "Stop camera" : "Camera"}</button><button onClick={() => void react("❤️")}><span>♡</span>React</button></div>{mediaError && <p className="watch-form-error">{mediaError}</p>}
+          <div className="watch-media-controls"><button className={micOn ? "active" : ""} disabled={mediaPending === "audio"} onClick={() => void addMedia("audio")}><span>{micOn ? "●" : "○"}</span>{mediaPending === "audio" ? "Allow access…" : micOn ? "Mute" : "Microphone"}</button><button className={cameraOn ? "active" : ""} disabled={mediaPending === "video"} onClick={() => void addMedia("video")}><span>▣</span>{mediaPending === "video" ? "Allow access…" : cameraOn ? "Stop camera" : "Camera"}</button><button onClick={() => void react("❤️")}><span>♡</span>React</button></div>{mediaError && <p className="watch-form-error">{mediaError}</p>}
         </div>
       </section>
       <aside className="watch-social-panel"><div className="watch-social-tabs"><strong>Room</strong><span>{participants.length}/{25}</span></div><div className="watch-participant-list">{participants.map((participant) => <div key={participant.id}><span className="watch-small-avatar">{initials(participant.displayName)}</span><p><strong>{participant.displayName}{participant.id === credentials.session.participantId ? " · you" : ""}</strong><small>{participant.role === "host" ? "Host" : "Watching"}</small></p><i className="online" /></div>)}</div><div className="watch-chat" aria-live="polite">{chat.length === 0 && <div className="watch-chat-empty"><span>✦</span><strong>Say hello</strong><p>Messages are encrypted with the invitation key and expire from room storage.</p></div>}{chat.map((item) => { const sender = participants.find((participant) => participant.id === item.senderId); return <article key={item.id}><strong>{sender?.displayName || "Guest"}</strong><p>{item.text}</p><time>{new Date(item.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></article>; })}</div><div className="watch-reactions">{emojiChoices.map((emoji) => <button key={emoji} onClick={() => void react(emoji)} aria-label={`React ${emoji}`}>{emoji}</button>)}</div><form className="watch-chat-form" onSubmit={submitChat}><textarea value={message} onChange={(event) => setMessage(event.target.value)} maxLength={1000} placeholder="Message the room" rows={2} /><button disabled={!message.trim()} aria-label="Send message">↑</button></form></aside>
