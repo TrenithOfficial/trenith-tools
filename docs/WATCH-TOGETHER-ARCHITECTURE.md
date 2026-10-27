@@ -66,7 +66,7 @@ Payloads are capped at 64 KiB. The client polls after the last monotonic sequenc
 | `/api/watch/rooms/:id/ice` | GET | bearer participant token | STUN and optional short-lived TURN configuration |
 | `/api/watch/rooms/:id/leave` | POST | bearer participant token | Deactivates participant; a leaving host hands over to the longest-present guest |
 | `/api/watch/rooms/:id/transfer` | POST | host bearer token | Makes `participantId` the host |
-| `/api/watch/rooms/:id/remove` | POST | host bearer token | Deactivates a guest's session |
+| `/api/watch/rooms/:id/remove` | POST | host bearer token | Deactivates a guest's session; the guest's next poll gets `403 {"code":"removed"}` |
 | `/api/watch/rooms/:id/lock` | POST | host bearer token | Blocks or allows new joins (HTTP 423 while locked) |
 | `/api/watch/rooms/:id` | DELETE | host bearer token | Ends room and deactivates roster |
 
@@ -112,7 +112,11 @@ The adapter searches document and open shadow roots for visible `video`/`audio` 
 
 - Roles come from the roster on every poll, not from the remembered session, so a hand-over takes effect in open tabs.
 - A host who leaves hands over immediately; a host silent past the 45-second presence window is replaced by the longest-present active guest on the next poll.
-- Hosts can transfer, remove a guest (the guest's token stops working) and lock the room (new joins receive HTTP 423). Chat shows joins, departures, handovers and lock changes as system lines.
+- Hosts can transfer, remove a guest (the guest's token stops working and their next poll is told `removed`, since the host's REST call usually lands before the mirrored `kick` event can be read) and lock the room (new joins receive HTTP 423). Chat shows joins, departures, handovers and lock changes as system lines.
+
+## End-to-end verification
+
+`npm run test:e2e:watch` (see README) drives the shipped companion in two real Chromium profiles against `next start` and `wrangler dev --local`, with a stand-in HTML5 player standing in for a provider. The only non-production element is a separate extension build whose manifest pre-grants the stand-in origin, because Chrome's optional-permission prompt cannot be accepted by automation. Measured on 27 October 2026: seek landed 0.02 s apart, 8 s of playback drifted 0.08 s, a stalled guest re-converged to 0.17 s, automatic promotion took 45 s, and after six minutes with both room tabs hidden the poll cadence was still ~500 ms with a post-soak seek landing in 0.5 s.
 
 Provider websites change without notice. Automated builds prove the adapter is packaged and policy-compliant; release qualification must also execute the manual provider matrix against test accounts that Trenith is authorized to use.
 

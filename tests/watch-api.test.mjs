@@ -198,9 +198,13 @@ test("host controls: transfer, remove and lock are host-only and take effect in 
   await request(`rooms/${host.roomId}/lock`, { method: "POST", token: host.participantToken, body: { locked: false } });
   assert.equal((await request(`rooms/${host.roomId}`, { method: "POST", body: { inviteProof, displayName: "Late" } })).status, 201);
 
-  // Remove deactivates the guest's token.
+  // Remove deactivates the guest's token, and the guest's next poll is told why
+  // (a plain 401 would read as "the room ended" on the removed person's page).
   assert.equal((await request(`rooms/${host.roomId}/remove`, { method: "POST", token: host.participantToken, body: { participantId: guestB.participantId } })).status, 200);
-  assert.equal((await request(`rooms/${host.roomId}/events?after=0`, { token: guestB.participantToken })).status, 401);
+  const removedPoll = await request(`rooms/${host.roomId}/events?after=0`, { token: guestB.participantToken });
+  assert.equal(removedPoll.status, 403);
+  assert.equal((await removedPoll.json()).code, "removed");
+  assert.equal((await request(`rooms/${host.roomId}/events?after=0`, { token: "not-a-token" })).status, 401);
 
   // Transfer makes Guest A the host: the old host loses host-only events and the new host gains them.
   assert.equal((await request(`rooms/${host.roomId}/transfer`, { method: "POST", token: host.participantToken, body: { participantId: guestA.participantId } })).status, 200);

@@ -53,6 +53,15 @@ npm run zip:extension
 
 Vercel reads `vercel.json` and runs the native Next.js build so the expected `.next` output is generated.
 
+End-to-end proof for Watch Together (not part of `npm test`; needs native `ffmpeg` on PATH and a Playwright Chromium — `npx playwright install chromium` once):
+
+```bash
+npm run build:vercel
+E2E_SOAK_MINUTES=6 npm run test:e2e:watch
+```
+
+It launches two Chromium profiles with the real companion installed, the room pages from `next start`, the signaling worker on a local D1 (`wrangler dev --local`), and a stand-in streaming site with a plain HTML5 player. It checks play/seek/pause/rate following within the 750 ms tolerance, the host heartbeat pulling back a stalled guest, roster drift labels, encrypted chat, WebRTC voice, handover, lock, remove, automatic host promotion, and (with the soak) that hidden room tabs keep polling at full cadence under Chrome's background throttling.
+
 Use two Vercel projects from this repository:
 
 | Project | Variables |
@@ -130,7 +139,7 @@ Optional worker configuration (set with `wrangler secret put <NAME> -c wrangler.
 | `WATCH_ACCESS_EMAIL_FROM` | Verified Resend sender for access emails |
 | `WATCH_ACCESS_EMAIL_TO` | Address notified of each new pending request |
 
-Host controls (bearer token of the current host): `POST /api/watch/rooms/:id/transfer` `{participantId}`, `POST /api/watch/rooms/:id/remove` `{participantId}`, `POST /api/watch/rooms/:id/lock` `{locked}`. The roster poll returns `hostId`, `locked` and `controlMode`; a host silent for longer than the 45-second presence window is replaced by the longest-present guest automatically. The `locked` column is added to existing databases by a self-applied migration.
+Host controls (bearer token of the current host): `POST /api/watch/rooms/:id/transfer` `{participantId}`, `POST /api/watch/rooms/:id/remove` `{participantId}`, `POST /api/watch/rooms/:id/lock` `{locked}`. The roster poll returns `hostId`, `locked` and `controlMode`; a removed participant's next poll answers `403 {"code":"removed"}` so their page can say so; a host silent for longer than the 45-second presence window is replaced by the longest-present guest automatically. The `locked` and `removed` columns are added to existing databases by self-applied migrations (`drizzle/0002_*.sql` is the reference).
 
 Approve a pending request manually (mints and returns/emails a key):
 

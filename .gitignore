@@ -17,6 +17,7 @@
 /.next/
 /out/
 /.output/
+/.output-e2e/
 /.wxt/
 
 # misc
@@ -47,3 +48,4 @@ next-env.d.ts
 /public/pdf/
 /tsconfig.tsbuildinfo
 /tsconfig.next.tsbuildinfo
+/tests/e2e/.cache/

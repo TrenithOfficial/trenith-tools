@@ -150,7 +150,10 @@ function json(request: Request, body: unknown, status = 200, extra: HeadersInit 
 
 // Columns added after the first deployment. Each ALTER is attempted on its own
 // and a "duplicate column" failure is the expected steady state.
-const schemaMigrations = ["ALTER TABLE watch_rooms ADD COLUMN locked INTEGER DEFAULT 0 NOT NULL"];
+const schemaMigrations = [
+  "ALTER TABLE watch_rooms ADD COLUMN locked INTEGER DEFAULT 0 NOT NULL",
+  "ALTER TABLE watch_participants ADD COLUMN removed INTEGER DEFAULT 0 NOT NULL",
+];
 
 async function ensureSchema(db: WatchD1): Promise<void> {
   schemaReady ??= (async () => {
@@ -200,6 +203,20 @@ async function authenticate(request: Request, db: WatchD1, roomId: string): Prom
     FROM watch_participants p JOIN watch_rooms r ON r.id = p.room_id
     WHERE p.room_id = ? AND p.token_hash = ? AND p.active = 1 AND r.ended_at IS NULL AND r.expires_at > ? LIMIT 1`)
     .bind(roomId, tokenHash, Date.now()).first<ParticipantRow>();
+}
+
+// A token that no longer authenticates may belong to someone the host removed.
+// Say so explicitly: the removed person's room page usually polls after the
+// host's REST call has already landed, so it would otherwise only ever see a
+// generic authorization failure and report the room as ended.
+async function authFailure(request: Request, db: WatchD1, roomId: string): Promise<Response> {
+  const token = bearerToken(request);
+  if (token) {
+    const removed = await db.prepare("SELECT removed FROM watch_participants WHERE room_id = ? AND token_hash = ? LIMIT 1")
+      .bind(roomId, await sha256(token)).first<{ removed: number }>();
+    if (removed?.removed) return json(request, { error: "The host removed you from this room.", code: "removed" }, 403);
+  }
+  return json(request, { error: "Room authorization failed." }, 401);
 }
 
 async function activeParticipants(db: WatchD1, roomId: string, now: number) {
@@ -357,7 +374,7 @@ async function joinRoom(request: Request, db: WatchD1, roomId: string): Promise<
 
 async function postEvent(request: Request, db: WatchD1, roomId: string): Promise<Response> {
   const participant = await authenticate(request, db, roomId);
-  if (!participant) return json(request, { error: "Room authorization failed." }, 401);
+  if (!participant) return authFailure(request, db, roomId);
   const body = await readBody(request);
   const payload = String(body.payload || "");
   const targetId = body.targetId == null ? null : String(body.targetId);
@@ -380,7 +397,7 @@ async function postEvent(request: Request, db: WatchD1, roomId: string): Promise
 
 async function getEvents(request: Request, db: WatchD1, roomId: string): Promise<Response> {
   const participant = await authenticate(request, db, roomId);
-  if (!participant) return json(request, { error: "Room authorization failed." }, 401);
+  if (!participant) return authFailure(request, db, roomId);
   const url = new URL(request.url);
   const after = Math.max(0, Number.parseInt(url.searchParams.get("after") || "0", 10) || 0);
   const now = Date.now();
@@ -432,7 +449,7 @@ async function removeParticipant(request: Request, db: WatchD1, roomId: string):
   const body = await readBody(request);
   const targetId = String(body.participantId || "");
   if (!isWatchParticipantId(targetId) || targetId === participant.id) return json(request, { error: "Choose another participant to remove." }, 400);
-  const result = await db.prepare("UPDATE watch_participants SET active = 0, last_seen_at = ? WHERE room_id = ? AND id = ? AND role = 'guest'").bind(Date.now(), roomId, targetId).run();
+  const result = await db.prepare("UPDATE watch_participants SET active = 0, removed = 1, last_seen_at = ? WHERE room_id = ? AND id = ? AND role = 'guest'").bind(Date.now(), roomId, targetId).run();
   return json(request, { removed: result.success });
 }
 

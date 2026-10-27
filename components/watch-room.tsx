@@ -297,6 +297,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         }
       } catch (caught) {
         if ((caught as Error).name === "AbortError") return;
+        if ((caught as { code?: string }).code === "removed") { setConnectionState("removed"); stoppedRef.current = true; return; }
         failures += 1;
         setConnectionState(failures > 2 ? "recovering" : "connecting");
         if (/ended|expired/i.test((caught as Error).message)) setConnectionState("ended");

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Stand-in streaming service — Test Feature</title>
+  <meta property="og:title" content="Test Feature (E2E stand-in)" />
+  <link rel="canonical" href="http://ott.test/watch/test-feature" />
+  <style>
+    body { margin: 0; background: #111; color: #eee; font: 14px system-ui, sans-serif; }
+    main { padding: 16px; }
+    video { display: block; width: 640px; height: 360px; background: #000; }
+    #log { white-space: pre; font: 12px monospace; color: #9f9; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Test Feature</h1>
+    <video id="player" src="/movie.webm" controls muted preload="auto"></video>
+    <div id="log"></div>
+  </main>
+  <script>
+    // A stand-in for a provider's HTML5 player: the companion's generic adapter
+    // must find this element, read it and drive it exactly as it would on a
+    // real site. The page itself knows nothing about Trenith.
+    const player = document.getElementById("player");
+    const log = document.getElementById("log");
+    for (const type of ["play", "pause", "seeked", "ratechange", "loadedmetadata"]) {
+      player.addEventListener(type, () => { log.textContent = `${type} @ ${player.currentTime.toFixed(2)} rate ${player.playbackRate}\n` + log.textContent.split("\n").slice(0, 8).join("\n"); });
+    }
+  </script>
+</body>
+</html>

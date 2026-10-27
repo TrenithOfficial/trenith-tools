@@ -19,9 +19,16 @@ async function watchRequest<T>(path: string, init: RequestInit = {}): Promise<T>
     cache: "no-store",
     headers: { "content-type": "application/json", ...(init.headers || {}) },
   });
-  const body = await response.json().catch(() => ({})) as T & { error?: string };
-  if (!response.ok) throw new Error(body.error || `Room request failed (${response.status}).`);
+  const body = await response.json().catch(() => ({})) as T & { error?: string; code?: string };
+  if (!response.ok) throw new WatchRequestError(body.error || `Room request failed (${response.status}).`, response.status, body.code);
   return body;
+}
+
+export class WatchRequestError extends Error {
+  constructor(message: string, readonly status: number, readonly code?: string) {
+    super(message);
+    this.name = "WatchRequestError";
+  }
 }
 
 const ACCESS_KEY_STORAGE = "trenith-watch-access";
