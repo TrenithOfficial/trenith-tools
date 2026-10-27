@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore } from "react";
 import { providerDefinitions, useSessionConnections } from "../lib/byok";
 import { tools } from "../lib/catalog";
+import { extractPdfText } from "../lib/pdf-tools";
 
 let voicesCache: { key: string; list: Array<{ name: string; lang: string }> } = { key: "", list: [] };
 
@@ -71,6 +72,8 @@ const workflowAdvice: Record<string, { ideal: string; anyKey: string }> = {
   "text-to-speech": { ideal: "ElevenLabs (or a compatible endpoint) returns a downloadable MP3.", anyKey: "Built-in browser voices speak the text instantly at no cost — no key needed." },
   "ocr-pdf": { ideal: "OpenAI, Gemini or Anthropic keys read text straight from an image.", anyKey: "Attach a JPG/PNG/WebP scan up to 3 MB; larger scans can be reduced with the free Image Compressor." },
   "office-converter": { ideal: "A compatible conversion endpoint returns the converted file.", anyKey: "Any text model maps content and formatting into a faithful conversion plan." },
+  "pdf-summarizer": { ideal: "Any OpenAI, Anthropic, Gemini or OpenRouter text model.", anyKey: "Attach a PDF and its text layer is read on your device and added to the brief — the file is never uploaded." },
+  "translate-pdf": { ideal: "Any OpenAI, Anthropic, Gemini or OpenRouter text model.", anyKey: "Attach a PDF and its text layer is read on your device and added to the brief; state the target language first." },
 };
 
 function speakWithBrowser(text: string, voiceName: string, rate: number) {
@@ -117,6 +120,26 @@ export function AiStudio() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [promptWorkflow, setPromptWorkflow] = useState(workflow);
+  const [documentState, setDocumentState] = useState<{ name: string; pages: number; characters: number; busy: boolean; message: string } | null>(null);
+  const documentWorkflow = workflow === "pdf-summarizer" || workflow === "translate-pdf";
+
+  // Document workflows read the PDF's text layer on-device with pdf.js and
+  // append it to the brief, so the file itself never leaves the browser and
+  // the provider receives only the text the person chose to send.
+  async function attachDocument(file: File | null) {
+    if (!file) { setDocumentState(null); return; }
+    setDocumentState({ name: file.name, pages: 0, characters: 0, busy: true, message: "Reading the text layer on your device…" });
+    try {
+      const extracted = await extractPdfText(file, () => undefined);
+      if (extracted.empty) { setDocumentState({ name: file.name, pages: extracted.pages, characters: 0, busy: false, message: "No text layer found — this looks like a scan. Use the OCR workflow with a vision-capable key." }); return; }
+      const budget = 40000 - (workflowPrompts[workflow] || "").length - 40;
+      const text = extracted.text.length > budget ? `${extracted.text.slice(0, budget)}\n\n[Document truncated to fit the 40,000-character brief]` : extracted.text;
+      setPrompt(`${workflowPrompts[workflow] || ""}\n\n${text}`);
+      setDocumentState({ name: file.name, pages: extracted.pages, characters: extracted.text.length, busy: false, message: extracted.text.length > budget ? `${extracted.pages} pages read; the text was truncated to fit the brief limit.` : `${extracted.pages} page${extracted.pages === 1 ? "" : "s"} read and added to the brief below.` });
+    } catch (caught) {
+      setDocumentState({ name: file.name, pages: 0, characters: 0, busy: false, message: caught instanceof Error ? caught.message : "The PDF could not be read." });
+    }
+  }
 
   // Reset the brief when the visitor switches workflows; adjusting state during
   // render keeps the reset synchronous without an effect.
@@ -124,6 +147,7 @@ export function AiStudio() {
     setPromptWorkflow(workflow);
     setPrompt(workflowPrompts[workflow] || "Describe the result you want to create.");
     setSourceFile(null);
+    setDocumentState(null);
   }
 
   const connectionId = selectedConnectionId && connections.some((item) => item.id === selectedConnectionId) ? selectedConnectionId : connections[0]?.id || "";
@@ -229,9 +253,10 @@ export function AiStudio() {
         {voices.length > 0 && <label className="studio-field">Browser voice<select value={voiceName} onChange={(event) => setVoiceName(event.target.value)}><option value="">Automatic voice</option>{voices.map((voice) => <option key={voice.name} value={voice.name}>{voice.name} · {voice.lang}</option>)}</select></label>}
         <label className="studio-field">Speaking rate · {speechRate.toFixed(2)}×<input type="range" min="0.5" max="1.5" step="0.05" value={speechRate} onChange={(event) => setSpeechRate(Number(event.target.value))} /></label>
       </>}
+      {documentWorkflow && <label className="studio-field">PDF document (text read on your device, optional)<input type="file" accept="application/pdf,.pdf" onChange={(event) => void attachDocument(event.target.files?.[0] || null)} />{documentState && <small>{documentState.name} · {documentState.message}</small>}</label>}
       {fileWorkflows.has(workflow) && <label className="studio-field">Authorized source file{workflow !== "ocr-pdf" && connection?.provider !== "compatible" ? " (optional in plan mode)" : ""}<input type="file" accept={workflowAccept[workflow]} onChange={(event) => setSourceFile(event.target.files?.[0] || null)} />{sourceFile && <small>{sourceFile.name} · {(sourceFile.size / 1024 / 1024).toFixed(2)} MB</small>}</label>}
       <label className="studio-field">Instructions or source text<textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={13} maxLength={40000} /></label>
-      <div className="studio-run-row"><small>{prompt.length.toLocaleString()} / 40,000 characters</small><button className="workspace-run" onClick={run} disabled={busy || (!connectionId && !browserSpeech)}>{busy ? (browserSpeech ? "Speaking…" : "Provider is working…") : browserSpeech ? "Speak with browser voice" : "Run with my provider"}<span>→</span></button></div>
+      <div className="studio-run-row"><small>{prompt.length.toLocaleString()} / 40,000 characters</small><button className="workspace-run" onClick={run} disabled={busy || documentState?.busy || (!connectionId && !browserSpeech)}>{busy ? (browserSpeech ? "Speaking…" : "Provider is working…") : browserSpeech ? "Speak with browser voice" : "Run with my provider"}<span>→</span></button></div>
       {error && <div className="workspace-error" aria-live="polite">{error}</div>}
     </section>
     <aside className="workspace-panel studio-output">

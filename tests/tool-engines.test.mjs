@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import JSZip from "jszip";
 import { PDFDocument } from "pdf-lib";
-import { audioProfiles } from "../lib/audio-transcode.ts";
+import { audioProfiles, defaultAudioOptions } from "../lib/audio-transcode.ts";
 import { extractPdfPages, imagesToPdf, mergePdfFiles, parsePageSelection, splitPdfToZip, transformPdf } from "../lib/client-tools.ts";
 
 const progress = () => undefined;
@@ -48,18 +48,24 @@ test("images-to-PDF engine creates one page per selected image", async () => {
   assert.equal((await PDFDocument.load(await output.arrayBuffer())).getPageCount(), 2);
 });
 
-test("audio conversion profiles expose six concrete encoders", () => {
-  assert.deepEqual(Object.keys(audioProfiles), ["mp3", "wav", "flac", "ogg", "opus", "m4a"]);
-  assert.match(audioProfiles.mp3.args(192).join(" "), /libmp3lame/);
-  assert.match(audioProfiles.opus.args(128).join(" "), /libopus/);
-  assert.match(audioProfiles.m4a.args(192).join(" "), /\baac\b/);
+test("audio conversion profiles expose twelve concrete encoders", () => {
+  assert.equal(Object.keys(audioProfiles).length, 12);
+  assert.match(audioProfiles.mp3.args(192, defaultAudioOptions).join(" "), /libmp3lame/);
+  assert.match(audioProfiles.opus.args(128, defaultAudioOptions).join(" "), /libopus/);
+  assert.match(audioProfiles.m4a.args(192, defaultAudioOptions).join(" "), /\baac\b/);
+  assert.match(audioProfiles.wma.args(128, defaultAudioOptions).join(" "), /wmav2/);
   assert.equal(audioProfiles.flac.lossless, true);
+  assert.equal(audioProfiles.alac.extension, "m4a");
 });
 
-test("catalog publishes 49 unique tools including the free SEO and Developer utilities", async () => {
+test("catalog publishes 56 unique tools including the video, PDF, SEO and Developer utilities", async () => {
   const { tools, categories } = await import("../lib/catalog.ts");
-  assert.equal(tools.length, 49);
-  assert.equal(new Set(tools.map((tool) => tool.slug)).size, 49);
+  assert.equal(tools.length, 56);
+  assert.equal(new Set(tools.map((tool) => tool.slug)).size, 56);
+  for (const slug of ["video-converter", "video-compressor", "video-trimmer", "video-to-audio", "video-to-gif", "pdf-to-image", "pdf-to-text"]) {
+    const tool = tools.find((item) => item.slug === slug);
+    assert.equal(tool?.kind, "device", `${slug} runs on-device`);
+  }
   const serp = tools.find((tool) => tool.slug === "serp-snippet-preview");
   const density = tools.find((tool) => tool.slug === "keyword-density-analyzer");
   assert.equal(serp?.kind, "device");
@@ -72,4 +78,21 @@ test("catalog publishes 49 unique tools including the free SEO and Developer uti
     assert.equal(tool?.kind, "device", `${slug} runs on-device`);
   }
   assert.ok(categories.includes("Developer"));
+});
+
+test("the packaged FFmpeg engine ships a chunk manifest that matches the chunks on disk", async () => {
+  const { readdir, readFile, stat } = await import("node:fs/promises");
+  const dir = new URL("../public/ffmpeg/", import.meta.url);
+  const manifest = JSON.parse(await readFile(new URL("ffmpeg-core.wasm.json", dir), "utf8"));
+  const parts = (await readdir(dir)).filter((name) => /^ffmpeg-core\.wasm\.part\d+$/.test(name)).sort();
+  assert.equal(parts.length, manifest.parts, "manifest part count matches the split output");
+  assert.ok(parts.length >= 2, "the engine is split into several hosting-sized chunks");
+  let bytes = 0;
+  for (const name of parts) {
+    const size = (await stat(new URL(name, dir))).size;
+    assert.ok(size <= 25 * 1024 * 1024, `${name} stays under the 25 MiB hosting limit`);
+    bytes += size;
+  }
+  assert.equal(bytes, manifest.bytes, "chunks reassemble to the full engine");
+  assert.equal(manifest.chunkBytes, 16000000);
 });

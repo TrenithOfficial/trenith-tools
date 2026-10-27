@@ -12,7 +12,8 @@ export type ImageOutputFormat =
   | "image/avif"
   | "image/bmp"
   | "image/x-icon"
-  | "image/gif";
+  | "image/gif"
+  | "image/tiff";
 
 export type LengthUnit = "px" | "in" | "cm" | "%";
 
@@ -24,6 +25,7 @@ export const OUTPUT_FORMATS: { value: ImageOutputFormat; label: string; ext: str
   { value: "image/bmp", label: "BMP", ext: "bmp", lossy: false, opaque: true, native: false },
   { value: "image/x-icon", label: "ICO", ext: "ico", lossy: false, opaque: false, native: false },
   { value: "image/gif", label: "GIF", ext: "gif", lossy: false, opaque: true, native: false },
+  { value: "image/tiff", label: "TIFF", ext: "tiff", lossy: false, opaque: false, native: false },
 ];
 
 export function formatMeta(format: ImageOutputFormat) {
@@ -205,8 +207,9 @@ export type ImageSource = ImageBitmap | HTMLImageElement;
 // Sniff the container by magic bytes (not filename, so it works for any Blob) to
 // route HEIC/HEIF and TIFF — which browsers can't decode natively, except Safari
 // for HEIC — to the on-demand decoders.
-async function sniffContainer(file: Blob): Promise<"heic" | "tiff" | "native"> {
+async function sniffContainer(file: Blob): Promise<"heic" | "tiff" | "svg" | "native"> {
   const head = new Uint8Array(await file.slice(0, 12).arrayBuffer());
+  if (file.type === "image/svg+xml" || /^\s*(<\?xml|<svg|<!DOCTYPE svg|<!--)/.test(new TextDecoder().decode(new Uint8Array(await file.slice(0, 256).arrayBuffer())))) return "svg";
   if ((head[0] === 0x49 && head[1] === 0x49 && head[2] === 0x2a && head[3] === 0x00) ||
       (head[0] === 0x4d && head[1] === 0x4d && head[2] === 0x00 && head[3] === 0x2a)) return "tiff";
   if (head[4] === 0x66 && head[5] === 0x74 && head[6] === 0x79 && head[7] === 0x70) { // "ftyp"
@@ -231,6 +234,40 @@ async function decodeTiff(file: Blob): Promise<ImageSource> {
   return await createImageBitmap(new ImageData(pixels, width, height));
 }
 
+// SVG has no fixed pixel size, so it is rasterized at a chosen longest side
+// (default 2048 px) with its aspect ratio taken from width/height or viewBox.
+// The markup is given explicit dimensions so every browser agrees on the size.
+export async function rasterizeSvg(file: Blob, longestSide = 2048): Promise<ImageSource> {
+  const text = await file.text();
+  const open = text.match(/<svg\b[^>]*>/i)?.[0] || "";
+  const attr = (name: string) => open.match(new RegExp(`\\s${name}=["']([^"']+)["']`, "i"))?.[1];
+  const viewBox = attr("viewBox")?.trim().split(/[\s,]+/).map(Number);
+  const toPx = (value?: string) => { if (!value) return 0; const number = Number.parseFloat(value); if (!Number.isFinite(number) || number <= 0) return 0; if (/%$/.test(value)) return 0; if (/mm$/.test(value)) return number * 96 / 25.4; if (/cm$/.test(value)) return number * 96 / 2.54; if (/in$/.test(value)) return number * 96; if (/pt$/.test(value)) return number * 96 / 72; return number; };
+  let width = toPx(attr("width"));
+  let height = toPx(attr("height"));
+  if ((!width || !height) && viewBox && viewBox.length === 4 && viewBox[2] > 0 && viewBox[3] > 0) {
+    if (!width && !height) { width = viewBox[2]; height = viewBox[3]; }
+    else if (!width) width = height * (viewBox[2] / viewBox[3]);
+    else height = width * (viewBox[3] / viewBox[2]);
+  }
+  if (!width || !height) { width = 1024; height = 1024; }
+  const scale = longestSide / Math.max(width, height);
+  const targetW = Math.max(1, Math.round(width * scale));
+  const targetH = Math.max(1, Math.round(height * scale));
+  const sized = open ? text.replace(open, open.replace(/\s(width|height)=["'][^"']*["']/gi, "").replace(/<svg\b/i, `<svg width="${targetW}" height="${targetH}"${viewBox ? "" : ` viewBox="0 0 ${width} ${height}"`}`)) : text;
+  const url = URL.createObjectURL(new Blob([sized], { type: "image/svg+xml" }));
+  try {
+    const image = new Image();
+    image.src = url;
+    await image.decode();
+    const canvas = makeCanvas(targetW, targetH);
+    context2d(canvas).drawImage(image, 0, 0, targetW, targetH);
+    return await createImageBitmap(canvas);
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 // Decode a file to a drawable source. createImageBitmap decodes off the render
 // pipeline (keeps working in a backgrounded tab) and applies EXIF orientation so
 // phone photos come out upright; the element decoder is the fallback. HEIC and
@@ -245,6 +282,7 @@ export async function decodeImage(file: Blob): Promise<ImageSource> {
     return await heicTo({ blob: file, type: "bitmap" });
   }
   if (container === "tiff") return await decodeTiff(file);
+  if (container === "svg") return await rasterizeSvg(file);
 
   if (typeof createImageBitmap === "function") {
     try { return await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { /* fall through to the element decoder */ }
@@ -337,6 +375,15 @@ async function encodeCanvas(canvas: HTMLCanvasElement, ctx: CanvasRenderingConte
     gif.writeFrame(index, canvas.width, canvas.height, { palette });
     gif.finish();
     return { blob: new Blob([gif.bytes() as BlobPart], { type: "image/gif" }), type: "image/gif" };
+  }
+  if (format === "image/tiff") {
+    // Uncompressed baseline TIFF with alpha, written by utif2; the pixels are
+    // copied exactly, so this is a lossless archival export.
+    const data = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const mod = await import("utif2");
+    const UTIF = (mod as unknown as { default?: typeof mod }).default ?? mod;
+    const encoded = UTIF.encodeImage(new Uint8Array(data.data.buffer, data.data.byteOffset, data.data.byteLength), canvas.width, canvas.height);
+    return { blob: new Blob([encoded as ArrayBuffer], { type: "image/tiff" }), type: "image/tiff" };
   }
   const blob = await canvasToBlob(canvas, format, quality);
   // toBlob silently falls back to PNG when it can't encode the type (older Safari

@@ -1,49 +1,52 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { downloadBlob } from "../lib/client-tools";
-import { canCleanMetadata, stripFileMetadata } from "../lib/metadata-clean";
+import { canCleanMetadata, cleanAndVerify, classifyFields, inspectMetadata, routeFor, routeLabel, unsupportedReason, type FieldReport, type MetadataField, type RiskCategory } from "../lib/metadata-clean";
 
-type MetadataValue = string | number | boolean | null | MetadataValue[] | { [key: string]: MetadataValue };
-type MetadataMap = Record<string, MetadataValue>;
 type ScrubItem = {
   id: string;
   file: File;
   status: "queued" | "scanning" | "ready" | "cleaning" | "clean" | "unsupported" | "error";
-  before: Array<[string, string]>;
-  after: Array<[string, string]>;
+  before: MetadataField[];
+  report: FieldReport;
+  after: MetadataField[];
+  afterReport: FieldReport;
+  notes: string[];
+  embedded: number;
+  passes: number;
+  progress?: string;
   output?: Blob;
   error?: string;
 };
 
-// Excludes ExifTool's own tags plus structural/container groups that describe
-// the file format (dimensions, bit depth, colour profile) rather than private
-// authorship or location metadata, so the "removable fields" count is honest.
-const operationalGroups = new Set(["ExifTool", "File", "System", "Composite", "JFIF", "ICC_Profile", "ICC-header", "PNG", "JPEG", "GIF", "BMP", "MPF", "FlashPix"]);
 const wasmFetch = async () => window.fetch("/zeroperl.wasm", { cache: "force-cache" });
+const categoryOrder: RiskCategory[] = ["Location", "Identity", "Device", "Timestamps", "Software", "Descriptive"];
+const emptyReport: FieldReport = { identifying: [], other: [], categories: {} };
+// Media that ExifTool can read but that the FFmpeg engine rewrites: skip the
+// ExifTool pre-scan beyond this size so a 1 GB recording does not get loaded
+// into the Perl heap twice.
+const SCAN_LIMIT_BYTES = 600 * 1024 * 1024;
 
-function displayValue(value: MetadataValue) {
-  if (value === null) return "null";
-  if (typeof value === "object") return JSON.stringify(value).slice(0, 240);
-  return String(value).slice(0, 240);
-}
-
-function privateMetadata(input: MetadataMap | undefined) {
-  if (!input) return [];
-  return Object.entries(input)
-    .filter(([key]) => !operationalGroups.has(key.split(":", 1)[0]) && !["SourceFile", "Directory"].includes(key))
-    .map(([key, value]) => [key, displayValue(value)] as [string, string])
-    .sort(([left], [right]) => left.localeCompare(right));
+function categorySummary(report: FieldReport) {
+  return categoryOrder.filter((category) => report.categories[category]).map((category) => `${category} ${report.categories[category]}`).join(" · ");
 }
 
 function statusLabel(item: ScrubItem) {
   if (item.status === "queued") return "Waiting to scan";
   if (item.status === "scanning") return "Inspecting metadata";
-  if (item.status === "ready") return `${item.before.length} removable field${item.before.length === 1 ? "" : "s"}`;
-  if (item.status === "cleaning") return "Removing metadata";
-  if (item.status === "clean") return `${Math.max(0, item.before.length - item.after.length)} fields removed · ${item.after.length} remain`;
-  if (item.status === "unsupported") return item.before.length ? `${item.before.length} field${item.before.length === 1 ? "" : "s"} detected · inspect only (format cannot be rewritten in-browser)` : "No readable or writable metadata";
+  if (item.status === "ready") return item.report.identifying.length ? `${item.report.identifying.length} identifying field${item.report.identifying.length === 1 ? "" : "s"} · ${categorySummary(item.report)}` : `No identifying fields detected · ${item.report.other.length} structural`;
+  if (item.status === "cleaning") return item.progress || "Removing metadata";
+  if (item.status === "clean") {
+    const removed = Math.max(0, item.report.identifying.length - item.afterReport.identifying.length);
+    return item.afterReport.identifying.length ? `${removed} removed · ${item.afterReport.identifying.length} identifying remain` : `${removed} identifying field${removed === 1 ? "" : "s"} removed · verified clean${item.embedded ? ` · ${item.embedded} embedded cleaned` : ""}`;
+  }
+  if (item.status === "unsupported") return item.report.identifying.length ? `${item.report.identifying.length} identifying field${item.report.identifying.length === 1 ? "" : "s"} detected · inspect only` : "Inspect only";
   return item.error || "Processing failed";
+}
+
+function FieldTable({ fields, prefix }: { fields: MetadataField[]; prefix: string }) {
+  return <dl>{fields.slice(0, 120).map(([key, value]) => <div key={`${prefix}-${key}`}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>;
 }
 
 export function MetadataScrubber() {
@@ -53,27 +56,40 @@ export function MetadataScrubber() {
   const [busy, setBusy] = useState(false);
   const [engineReady, setEngineReady] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [showOther, setShowOther] = useState<Record<string, boolean>>({});
   const update = (id: string, value: Partial<ScrubItem>) => setItems((current) => current.map((item) => item.id === id ? { ...item, ...value } : item));
+
+  const totals = useMemo(() => ({
+    files: items.length,
+    detected: items.reduce((sum, item) => sum + item.report.identifying.length, 0),
+    removed: items.filter((item) => item.status === "clean").reduce((sum, item) => sum + Math.max(0, item.report.identifying.length - item.afterReport.identifying.length), 0),
+    cleaned: items.filter((item) => item.output).length,
+    embedded: items.reduce((sum, item) => sum + item.embedded, 0),
+  }), [items]);
 
   async function scanOne(item: ScrubItem) {
     update(item.id, { status: "scanning", error: undefined });
+    const cleanable = canCleanMetadata(item.file.name);
+    const route = routeFor(item.file.name);
+    if (route === "plain") { update(item.id, { status: "ready", before: [], report: emptyReport }); return; }
+    if (route === "media" && item.file.size > SCAN_LIMIT_BYTES) { update(item.id, { status: "ready", before: [], report: emptyReport, notes: ["Large recording: inspection skipped, cleaning rewrites every tag and chapter."] }); return; }
     try {
-      const { parseMetadata } = await import("@uswriting/exiftool");
+      const before = await inspectMetadata(item.file, item.file.name, wasmFetch);
       setEngineReady(true);
-      const result = await parseMetadata<MetadataMap[]>(item.file, { args: ["-json", "-G1", "-s", "-n"], fetch: wasmFetch, transform: (value) => JSON.parse(value) as MetadataMap[] });
-      if (!result.success) throw new Error(result.error);
-      // Only promise a clean for formats the engine can actually rewrite; a
-      // read-only format is shown as inspect-only rather than "ready" so the
-      // user is never offered a removal that would fail with no download.
-      update(item.id, { status: canCleanMetadata(item.file.name) ? "ready" : "unsupported", before: privateMetadata(result.data[0]) });
+      update(item.id, { status: cleanable ? "ready" : "unsupported", before, report: classifyFields(before), error: cleanable ? undefined : unsupportedReason(item.file.name) });
     } catch (caught) {
-      update(item.id, { status: "unsupported", error: caught instanceof Error ? caught.message : "The file format could not be inspected." });
+      // ExifTool could not parse it. Routes with their own engine can still clean.
+      const message = caught instanceof Error ? caught.message : "The file format could not be inspected.";
+      if (cleanable && route !== "unsupported") update(item.id, { status: "ready", before: [], report: emptyReport, notes: [`Inspection skipped: ${message}`] });
+      else update(item.id, { status: "unsupported", error: cleanable ? message : unsupportedReason(item.file.name) });
     }
   }
 
   async function addFiles(fileList: FileList | null) {
     if (!fileList?.length) return;
-    const additions = [...fileList].sort((a, b) => a.webkitRelativePath.localeCompare(b.webkitRelativePath, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true })).map((file) => ({ id: crypto.randomUUID(), file, status: "queued" as const, before: [], after: [] }));
+    const additions: ScrubItem[] = [...fileList]
+      .sort((a, b) => a.webkitRelativePath.localeCompare(b.webkitRelativePath, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true }))
+      .map((file) => ({ id: crypto.randomUUID(), file, status: "queued" as const, before: [], report: emptyReport, after: [], afterReport: emptyReport, notes: [], embedded: 0, passes: 0 }));
     setItems((current) => [...current, ...additions]);
     setBusy(true);
     for (const item of additions) await scanOne(item);
@@ -81,23 +97,16 @@ export function MetadataScrubber() {
   }
 
   async function cleanOne(item: ScrubItem) {
-    update(item.id, { status: "cleaning", error: undefined });
-    let blob: Blob;
+    update(item.id, { status: "cleaning", error: undefined, progress: "Removing metadata" });
     try {
-      blob = await stripFileMetadata(item.file, wasmFetch);
+      const result = await cleanAndVerify(item.file, wasmFetch, (message) => update(item.id, { progress: message }));
+      // Commit the downloadable output together with the verification so a file
+      // is never shown as clean without the evidence behind that label.
+      update(item.id, { status: "clean", output: result.blob, after: result.after, afterReport: result.report, notes: [...new Set([...item.notes, ...result.notes])], embedded: result.embedded, passes: result.passes, progress: undefined });
+      setEngineReady(true);
     } catch (caught) {
-      update(item.id, { status: "error", error: caught instanceof Error ? caught.message : "Metadata removal failed." });
-      return;
+      update(item.id, { status: "error", error: caught instanceof Error ? caught.message : "Metadata removal failed.", progress: undefined });
     }
-    // Commit the downloadable output before verifying, so a re-inspection error
-    // can never discard an already-cleaned file.
-    update(item.id, { status: "clean", output: blob, after: [] });
-    try {
-      const { parseMetadata } = await import("@uswriting/exiftool");
-      const verificationFile = new File([blob], item.file.name, { type: item.file.type, lastModified: Date.now() });
-      const verified = await parseMetadata<MetadataMap[]>(verificationFile, { args: ["-json", "-G1", "-s", "-n"], fetch: wasmFetch, transform: (value) => JSON.parse(value) as MetadataMap[] });
-      if (verified.success) update(item.id, { after: privateMetadata(verified.data[0]) });
-    } catch { /* keep the cleaned output even if re-inspection fails */ }
   }
 
   async function cleanAll() {
@@ -115,6 +124,7 @@ export function MetadataScrubber() {
     // folders). JSZip overwrites same-name entries, so de-duplicate here — a
     // silent drop from a privacy tool could leave a user with an uncleaned file.
     const usedNames = new Set<string>();
+    const epoch = new Date(Date.UTC(1980, 0, 1));
     cleaned.forEach((item) => {
       const base = item.file.webkitRelativePath || item.file.name;
       let name = base;
@@ -126,25 +136,53 @@ export function MetadataScrubber() {
         do { name = `${stem} (${counter})${ext}`; counter += 1; } while (usedNames.has(name));
       }
       usedNames.add(name);
-      zip.file(name, item.output!);
+      zip.file(name, item.output!, { date: epoch });
     });
     downloadBlob(await zip.generateAsync({ type: "blob", compression: "DEFLATE" }), "trenith-metadata-cleaned.zip");
   }
 
+  const pendingCount = items.filter((item) => item.status === "ready" || item.status === "error").length;
+
   return <div className="metadata-workspace">
     <section className="workspace-panel metadata-intro">
-      <div><span className="panel-label">PRIVACY SCRUBBER</span><h2>Inspect first. Remove second. Verify before download.</h2><p>ExifTool runs as WebAssembly inside this browser. Trenith accepts every file for inspection and safely cleans formats the engine can write without uploading the source.</p></div>
-      <div className="metadata-pickers"><button className="file-picker" onClick={() => input.current?.click()}><span>＋</span><strong>Choose any files</strong><small>Images, media, documents, archives and more</small></button><button className="file-picker" onClick={() => folderInput.current?.click()}><span>▦</span><strong>Choose a folder</strong><small>Preserves folder-relative names in ZIP export</small></button></div>
-      <input ref={input} className="sr-only" type="file" multiple onChange={(event) => addFiles(event.target.files)} />
-      <input ref={(node) => { folderInput.current = node; if (node) node.setAttribute("webkitdirectory", ""); }} className="sr-only" type="file" multiple onChange={(event) => addFiles(event.target.files)} />
-      <div className="metadata-engine"><span className={engineReady ? "status-dot" : "engine-dot"} /><strong>{engineReady ? "Private cleaning engine ready" : busy ? "Loading the private cleaning engine…" : "Engine loads only after you select a file"}</strong><small>No file content is sent to Trenith.</small></div>
+      <div><span className="panel-label">PRIVACY SCRUBBER</span><h2>Inspect first. Remove second. Verify before download.</h2><p>Every file type gets the engine that can actually rewrite it: ExifTool for images and RAW, a lossless FFmpeg stream copy for audio and video, document rewriters for PDF, Word, Excel, PowerPoint, OpenDocument, EPUB, SVG, HTML and RTF, and a recursive pass through ZIP archives and the media embedded inside documents. Colour profiles, orientation and track languages are kept so nothing looks or plays differently.</p></div>
+      <div className="metadata-pickers"><button className="file-picker" onClick={() => input.current?.click()}><span>＋</span><strong>Choose any files</strong><small>Images, RAW, audio, video, documents, archives</small></button><button className="file-picker" onClick={() => folderInput.current?.click()}><span>▦</span><strong>Choose a folder</strong><small>Preserves folder-relative names in ZIP export</small></button></div>
+      <input ref={input} className="sr-only" type="file" multiple onChange={(event) => { void addFiles(event.target.files); event.currentTarget.value = ""; }} />
+      <input ref={(node) => { folderInput.current = node; if (node) node.setAttribute("webkitdirectory", ""); }} className="sr-only" type="file" multiple onChange={(event) => { void addFiles(event.target.files); event.currentTarget.value = ""; }} />
+      <div className="metadata-engine"><span className={engineReady ? "status-dot" : "engine-dot"} /><strong>{engineReady ? "Private cleaning engines ready" : busy ? "Loading the private cleaning engine…" : "Engines load only after you select a file"}</strong><small>No file content is sent to Trenith. The media engine (about 31 MB) loads on first use for audio and video.</small></div>
     </section>
 
     {items.length > 0 && <section className="workspace-panel metadata-results">
-      <div className="metadata-results-head"><div><span className="panel-label">INSPECTION REPORT</span><h2>{items.length} file{items.length === 1 ? "" : "s"}</h2></div><div><button className="secondary-button" onClick={() => setItems([])} disabled={busy}>Clear</button><button className="primary-action" onClick={cleanAll} disabled={busy || !items.some((item) => item.status === "ready" || item.status === "error")}>{busy ? "Working…" : "Remove detected metadata"}<span>→</span></button></div></div>
-      <div className="metadata-list">{items.map((item) => <article key={item.id} className={`metadata-row ${item.status}`}><div className="metadata-row-head"><button className="metadata-summary" onClick={() => setExpanded(expanded === item.id ? null : item.id)}><span className="metadata-file-icon">{item.file.name.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE"}</span><div><strong>{item.file.webkitRelativePath || item.file.name}</strong><small>{(item.file.size / 1024 / 1024).toFixed(2)} MB · {statusLabel(item)}</small></div><b>{expanded === item.id ? "−" : "+"}</b></button>{item.output && <button className="metadata-row-download" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)} aria-label={`Download cleaned ${item.file.name}`}>Download ↓</button>}</div>{expanded === item.id && <div className="metadata-details">{item.error && <p className="metadata-warning">{item.error}</p>}{item.before.length ? <><h3>Detected before cleaning</h3><dl>{item.before.slice(0, 100).map(([key, value]) => <div key={key}><dt>{key}</dt><dd>{value}</dd></div>)}</dl>{item.before.length > 100 && <p>Showing 100 of {item.before.length} fields.</p>}</> : <p>No removable metadata fields were detected.</p>}{item.status === "clean" && <p className="metadata-clean-note">Verification complete: {item.after.length} non-operational metadata fields remain.</p>}{item.status === "clean" && item.after.length > 0 && <><h3>Remaining after cleaning</h3><dl>{item.after.slice(0, 100).map(([key, value]) => <div key={`after-${key}`}><dt>{key}</dt><dd>{value}</dd></div>)}</dl></>}<div className="metadata-row-actions">{item.status === "ready" && <button className="secondary-button" onClick={() => cleanOne(item)}>Clean this file</button>}{item.output && <button className="secondary-button" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)}>Download cleaned file</button>}</div></div>}</article>)}</div>
+      <div className="metadata-results-head"><div><span className="panel-label">INSPECTION REPORT</span><h2>{totals.files} file{totals.files === 1 ? "" : "s"}</h2><p className="metadata-totals">{totals.detected} identifying field{totals.detected === 1 ? "" : "s"} detected{totals.cleaned ? ` · ${totals.removed} removed in ${totals.cleaned} cleaned file${totals.cleaned === 1 ? "" : "s"}` : ""}{totals.embedded ? ` · ${totals.embedded} embedded file${totals.embedded === 1 ? "" : "s"} cleaned inside documents` : ""}</p></div><div><button className="secondary-button" onClick={() => setItems([])} disabled={busy}>Clear</button><button className="primary-action" onClick={cleanAll} disabled={busy || !pendingCount}>{busy ? "Working…" : `Remove metadata from ${pendingCount || "all"} file${pendingCount === 1 ? "" : "s"}`}<span>→</span></button></div></div>
+      <div className="metadata-list">{items.map((item) => {
+        const route = routeFor(item.file.name);
+        const remainingIdentifying = item.afterReport.identifying;
+        return <article key={item.id} className={`metadata-row ${item.status}`}>
+          <div className="metadata-row-head">
+            <button className="metadata-summary" onClick={() => setExpanded(expanded === item.id ? null : item.id)} aria-expanded={expanded === item.id}><span className="metadata-file-icon">{item.file.name.split(".").pop()?.slice(0, 4).toUpperCase() || "FILE"}</span><div><strong>{item.file.webkitRelativePath || item.file.name}</strong><small>{(item.file.size / 1024 / 1024).toFixed(2)} MB · {statusLabel(item)}</small></div><b>{expanded === item.id ? "−" : "+"}</b></button>
+            {item.output && <button className="metadata-row-download" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)} aria-label={`Download cleaned ${item.file.name}`}>Download ↓</button>}
+          </div>
+          {expanded === item.id && <div className="metadata-details">
+            <p className="metadata-route"><span>ENGINE</span> {routeLabel(route)}</p>
+            {item.error && <p className="metadata-warning">{item.error}</p>}
+            {item.report.identifying.length > 0 && <div className="metadata-categories">{categoryOrder.filter((category) => item.report.categories[category]).map((category) => <span key={category} className={`metadata-category ${category.toLowerCase()}`}>{category} · {item.report.categories[category]}</span>)}</div>}
+            {item.before.length ? <>
+              <h3>Identifying fields detected ({item.report.identifying.length})</h3>
+              {item.report.identifying.length ? <FieldTable fields={item.report.identifying} prefix="before" /> : <p>None. The fields below describe the format, not the author.</p>}
+              {item.report.other.length > 0 && <p><button className="text-button" onClick={() => setShowOther((current) => ({ ...current, [item.id]: !current[item.id] }))}>{showOther[item.id] ? "Hide" : "Show"} {item.report.other.length} structural field{item.report.other.length === 1 ? "" : "s"}</button></p>}
+              {showOther[item.id] && <FieldTable fields={item.report.other} prefix="other" />}
+            </> : item.status !== "scanning" && item.status !== "queued" && <p>{route === "plain" ? "This format has no metadata container, so there is nothing to remove." : "No metadata fields were readable before cleaning."}</p>}
+            {item.status === "clean" && <>
+              <p className={remainingIdentifying.length ? "metadata-warning" : "metadata-clean-note"}>{remainingIdentifying.length ? `Verification found ${remainingIdentifying.length} identifying field${remainingIdentifying.length === 1 ? "" : "s"} that could not be removed in-browser.` : `Verification complete${item.passes > 1 ? ` after ${item.passes} passes` : ""}: no identifying metadata remains. ${item.afterReport.other.length} structural field${item.afterReport.other.length === 1 ? "" : "s"} describe the format only.`}</p>
+              {remainingIdentifying.length > 0 && <><h3>Still present after cleaning</h3><FieldTable fields={remainingIdentifying} prefix="after" /></>}
+            </>}
+            {item.notes.length > 0 && <ul className="metadata-notes">{item.notes.map((note) => <li key={note}>{note}</li>)}</ul>}
+            <div className="metadata-row-actions">{(item.status === "ready" || item.status === "error") && <button className="secondary-button" onClick={() => void cleanOne(item)} disabled={busy}>Clean this file</button>}{item.output && <button className="secondary-button" onClick={() => downloadBlob(item.output!, `clean-${item.file.name}`)}>Download cleaned file</button>}</div>
+          </div>}
+        </article>;
+      })}</div>
       {items.filter((item) => item.output).length > 1 && <button className="workspace-run" onClick={downloadZip}>Download all cleaned files as ZIP <span>↓</span></button>}
-      <p className="metadata-caveat">Verification is format-aware, but no automated remover can promise that every proprietary application-specific trace is gone. Review high-risk files with the receiving application before publication.</p>
+      <p className="metadata-caveat">Verification is format-aware and re-reads every cleaned file, but no automated remover can promise that every proprietary application trace, visible watermark or detail drawn into the pixels is gone. Review high-risk files with the receiving application before publication.</p>
     </section>}
   </div>;
 }

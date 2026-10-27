@@ -16,9 +16,9 @@ const faqs = [
 const categoryShowcase = [
   { name: "Privacy", icon: "⌫", copy: "Inspect and remove hidden file data before you share.", tools: ["metadata-remover"] },
   { name: "Audio", icon: "♪", copy: "Download, convert, cut, adjust and join audio locally.", tools: ["audio-converter", "audio-joiner", "audio-trimmer"] },
-  { name: "Video", icon: "▶", copy: "Combine compatible clips and complete folders in order.", tools: ["video-joiner"] },
-  { name: "PDF", icon: "PDF", copy: "Merge, split, organize, rotate, number and watermark PDFs.", tools: ["merge-pdf", "split-pdf", "organize-pdf"] },
-  { name: "Image", icon: "◫", copy: "Compress, resize and convert common image formats.", tools: ["image-compressor", "image-resizer", "image-converter"] },
+  { name: "Video", icon: "▶", copy: "Convert, compress, trim, extract audio and make GIFs — lossless whenever codecs allow.", tools: ["video-converter", "video-compressor", "video-trimmer"] },
+  { name: "PDF", icon: "PDF", copy: "Merge, split, compress, render to images, extract text and watermark PDFs.", tools: ["merge-pdf", "compress-pdf", "pdf-to-image"] },
+  { name: "Image", icon: "◫", copy: "Crop, compress, resize and convert — HEIC, TIFF and SVG included, in batches.", tools: ["image-compressor", "image-resizer", "image-converter"] },
   { name: "Music", icon: "♩", copy: "Fast calculators and practice tools for musicians.", tools: ["tap-bpm", "bpm-delay-calculator", "metronome"] },
   { name: "AI Studio", icon: "✦", copy: "Run clear workflows with provider keys you control.", tools: ["ai-chat", "text-to-speech", "seo-brief-generator"] },
 ] as const;
@@ -51,7 +51,7 @@ export default function Home() {
         <div className="hero-copy">
           <span className="section-kicker">PRIVATE-BY-DESIGN FILE UTILITIES</span>
           <h1>Every file tool.<br /><em>Free. Private. Fast.</em></h1>
-          <p>Remove private metadata, download authorized audio, join large media folders, work with PDFs and connect your own AI providers—inside one clear Trenith workspace.</p>
+          <p>Remove private metadata from any file, convert video and audio losslessly where codecs allow, compress and render PDFs, batch-process images and connect your own AI providers—inside one clear Trenith workspace.</p>
           <div className="hero-actions">
             <Link className="primary-action" href="/tools">Open all {tools.length} tools <span>→</span></Link>
             <Link className="text-action" href="/connections">Connect your AI keys</Link>

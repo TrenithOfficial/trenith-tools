@@ -9,8 +9,8 @@ export default defineConfig({
   manifest: ({ browser }) => ({
     name: "Trenith Watch Together",
     short_name: "Trenith Watch",
-    version: "1.0.2",
-    version_name: "1.0.2 audited beta",
+    version: "1.1.0",
+    version_name: "1.1.0 synced beta",
     description: "Synchronize authorized OTT playback with encrypted Trenith rooms, live voice and video.",
     permissions: ["activeTab", "scripting", "storage"],
     optional_host_permissions: ["https://*/*"],
@@ -24,5 +24,12 @@ export default defineConfig({
       },
     } } as never : undefined,
   }),
-  zip: { artifactTemplate: "trenith-watch-together-1.0.2-{{browser}}.zip", zipSources: true },
+  zip: {
+    artifactTemplate: "trenith-watch-together-1.1.0-{{browser}}.zip",
+    sourcesTemplate: "trenith-watch-together-1.1.0-sources.zip",
+    zipSources: true,
+    // The reviewer source ZIP needs what builds the companion, not the site's
+    // build output or the multi-megabyte browser engines the site serves.
+    excludeSources: ["dist/**", "public/ffmpeg/**", "public/pdf/**", "public/zeroperl.wasm", "tests/fixtures/**", "**/*.wasm", "**/*.tsbuildinfo"],
+  },
 });

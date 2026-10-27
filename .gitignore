@@ -44,5 +44,6 @@ next-env.d.ts
 /work/
 /public/zeroperl.wasm
 /public/ffmpeg/
+/public/pdf/
 /tsconfig.tsbuildinfo
 /tsconfig.next.tsbuildinfo

@@ -9,10 +9,18 @@ India regional site: https://tools.trenith.in
 - /tools — searchable directory of every working tool
 - /watch-together — free synchronized OTT watch rooms with encrypted chat, optional camera and microphone
 - /watch-together/supported — current provider/browser compatibility and extension setup
-- /tools/metadata-remover — local metadata inspection, removal and verification
+- /tools/metadata-remover — local metadata inspection, removal and verification for images, RAW, every audio/video container, PDF, Office, OpenDocument, EPUB, SVG, HTML, RTF and ZIP (embedded media included)
+- /tools/video-converter — MP4, WebM, MKV and MOV conversion with lossless remuxing when codecs fit
+- /tools/video-compressor — H.264 compression by quality or target size
+- /tools/video-trimmer — keyframe-exact lossless or frame-accurate cuts
+- /tools/video-to-audio — bit-for-bit audio extraction when codecs match
+- /tools/video-to-gif — palette-optimized animated GIFs
 - /tools/audio-joiner — ordered file/folder joining with large-job streaming
-- /tools/audio-converter — private MP3, WAV, FLAC, Ogg, Opus and M4A/AAC conversion
-- /tools/audio-trimmer — exact time-range cutting with WAV output
+- /tools/audio-converter — private batch conversion to MP3, M4A/AAC, WAV, FLAC, ALAC, AIFF, Ogg, Opus, WebM, WavPack, AC3 and WMA
+- /tools/audio-trimmer — lossless same-format cuts or any output format
+- /tools/compress-pdf — embedded image recompression with the text layer untouched
+- /tools/pdf-to-image — pdf.js rendering to JPG, PNG or WebP
+- /tools/pdf-to-text — on-device text-layer extraction
 - /tools/serp-snippet-preview — free on-device SERP snippet and meta length preview
 - /tools/keyword-density-analyzer — free on-device keyword density, readability and question analysis
 - /guides/convert-audio-formats-in-browser — audio format and quality guidance
@@ -33,8 +41,9 @@ India regional site: https://tools.trenith.in
 - Trenith Tools has no subscription price or artificial file-count quota. Device capacity, codec support, free storage and individual file health are practical limits.
 - Large audio jobs stream to a user-selected disk destination in compatible desktop browsers. Files rejected by native browser decoding are retried with a locally loaded FFmpeg compatibility engine.
 - Trenith does not sell personal data, file contents, BYOK keys, prompts or outputs.
-- The metadata remover supports ExifTool-compatible formats but cannot guarantee removal of proprietary or visible traces.
+- The metadata remover rewrites every supported family with the engine that can do so safely (ExifTool, FFmpeg stream copy, pdf-lib, package rewriters), keeps colour profiles, orientation and track languages, re-verifies every output, and still cannot guarantee removal of proprietary application traces or details visible in the pixels.
+- Video re-encoding runs single-threaded in WebAssembly and is slower than real time for long high-resolution clips; lossless remuxes and audio extraction finish in seconds.
 - The public source scanner does not bypass authentication, DRM or platform access controls.
 - Provider-dependent features require a compatible user-owned key; no generation credits are bundled.
 - Watch Together never retransmits the OTT title. Each participant uses a lawful provider account. Launch web adapters cover YouTube, Netflix, Prime Video and JioHotstar; other listed HTML5 providers are beta, and native TV/mobile apps are not controlled.
-- Room chat and playback events are encrypted in the browser and short-lived. Camera/microphone uses WebRTC, remains off by default and is limited to 6 media participants; sync/chat supports up to 25.
+- Room chat and playback events are encrypted in the browser and short-lived. Clocks are aligned with the signaling server and positions are projected for latency; the host heartbeats while playing and can resync, hand over, lock or remove; a silent host is replaced automatically. Camera/microphone uses WebRTC, remains off by default and is limited to 6 media participants; sync/chat supports up to 25.

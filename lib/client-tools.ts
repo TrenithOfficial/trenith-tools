@@ -1,6 +1,10 @@
 "use client";
 
 import { decodeAudioWithFallback } from "./audio-transcode.ts";
+import { decodeImage, sourceSize } from "./image-engine.ts";
+import { loadPdfDocument } from "./pdf-tools.ts";
+
+export { compressPdfImages } from "./pdf-tools.ts";
 
 export type ProgressHandler = (percent: number, message: string) => void;
 export type AudioJoinOptions = { skipUnreadable?: boolean };
@@ -429,21 +433,7 @@ export function parsePageSelection(value: string, totalPages: number) {
   return indexes;
 }
 
-// pdf-lib rejects any encrypted PDF (even ones that open with no password) and
-// its raw error tells the user to call a JavaScript API they cannot reach.
-// Load through this helper so every PDF tool fails with one clear, honest
-// message instead of the developer-facing string.
-async function loadPdf(bytes: ArrayBuffer) {
-  const { PDFDocument } = await import("pdf-lib");
-  try {
-    return await PDFDocument.load(bytes, { ignoreEncryption: false });
-  } catch (error) {
-    if (error instanceof Error && /encrypt/i.test(error.message)) {
-      throw new Error("This PDF is password-protected or encrypted, so it can't be processed in the browser. Remove its protection first (open it and re-save or print to PDF), then try again.");
-    }
-    throw error;
-  }
-}
+const loadPdf = (bytes: ArrayBuffer) => loadPdfDocument(bytes, { updateMetadata: true });
 
 export async function mergePdfFiles(files: File[], progress: ProgressHandler) {
   if (files.length < 2) throw new Error("Choose at least two PDF files to merge.");
@@ -550,13 +540,12 @@ export async function transformPdf(
 }
 
 // pdf-lib can only embed PNG and JPEG. Anything else the picker accepts (WebP,
-// and browsers that decode HEIC/GIF) is re-encoded to PNG on a canvas first, so
-// a WebP no longer throws and fails the whole batch.
+// AVIF, GIF, BMP, HEIC, TIFF, SVG) is decoded by the image engine and
+// re-encoded losslessly to PNG first, so no format fails the whole batch.
 async function imageToPngBytes(file: File): Promise<ArrayBuffer> {
-  const source = await decodeImageSource(file);
+  const source = await decodeImage(file);
   try {
-    const width = "naturalWidth" in source ? source.naturalWidth : source.width;
-    const height = "naturalHeight" in source ? source.naturalHeight : source.height;
+    const { width, height } = sourceSize(source);
     if (!width || !height) throw new Error(`${file.name} could not be decoded for the PDF.`);
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -573,7 +562,7 @@ async function imageToPngBytes(file: File): Promise<ArrayBuffer> {
 }
 
 export async function imagesToPdf(files: File[], progress: ProgressHandler) {
-  if (!files.length) throw new Error("Choose one or more JPG, PNG or WebP images.");
+  if (!files.length) throw new Error("Choose one or more images.");
   const { PDFDocument } = await import("pdf-lib");
   const document = await PDFDocument.create();
   for (let index = 0; index < files.length; index += 1) {
@@ -596,31 +585,11 @@ export async function imagesToPdf(files: File[], progress: ProgressHandler) {
   return new Blob([await document.save({ useObjectStreams: true }) as BlobPart], { type: "application/pdf" });
 }
 
-async function decodeImageSource(file: File): Promise<ImageBitmap | HTMLImageElement> {
-  // createImageBitmap decodes off the rendering pipeline, so it keeps working
-  // when the tab is backgrounded; HTMLImageElement.decode() can stall there.
-  if ("createImageBitmap" in window) {
-    // "from-image" applies the file's EXIF orientation so portrait phone photos
-    // export upright and match the HTMLImageElement fallback (which auto-rotates).
-    try { return await createImageBitmap(file, { imageOrientation: "from-image" }); } catch { /* fall through to the element decoder */ }
-  }
-  const url = URL.createObjectURL(file);
-  try {
-    const image = new Image();
-    image.src = url;
-    await image.decode();
-    return image;
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 export async function processImage(file: File, width: number, quality: number, format: "image/jpeg" | "image/png" | "image/webp") {
   if (!Number.isFinite(width) || width < 1) throw new Error("Enter a maximum width of at least 1 pixel.");
-  const source = await decodeImageSource(file);
+  const source = await decodeImage(file);
   try {
-    const sourceWidth = "naturalWidth" in source ? source.naturalWidth : source.width;
-    const sourceHeight = "naturalHeight" in source ? source.naturalHeight : source.height;
+    const { width: sourceWidth, height: sourceHeight } = sourceSize(source);
     if (!sourceWidth || !sourceHeight) throw new Error("This image could not be decoded by the browser.");
     const scale = Math.min(1, width / sourceWidth);
     const canvas = document.createElement("canvas");

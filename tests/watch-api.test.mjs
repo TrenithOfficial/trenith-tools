@@ -46,7 +46,7 @@ const accessKey = approved.accessKey;
 test("watch room API enforces invitation proof, tokens, targeting and host termination", async () => {
   const health = await request("health");
   assert.equal(health.status, 200);
-  assert.equal((await health.json()).protocolVersion, 1);
+  assert.equal((await health.json()).protocolVersion, 2);
 
   const inviteProof = "abcdefghijklmnopqrstuvwxyzABCDEFGH123456";
   const createdResponse = await request("rooms", { method: "POST", accessKey, body: { inviteProof, displayName: " Host ", provider: "youtube", controlMode: "host" } });
@@ -175,4 +175,60 @@ test("access reissue: mints a fresh key for an approved email, 404 otherwise", a
   const miss = await request("access/reissue", { method: "POST", admin: ADMIN_SECRET, body: { email: "nobody-here@example.com" } });
   assert.equal(miss.status, 404);
   assert.equal((await request("access/reissue", { method: "POST", body: { email: "reissue@trenith.com" } })).status, 401);
+});
+
+test("host controls: transfer, remove and lock are host-only and take effect in the roster", async () => {
+  const inviteProof = "hostcontrolsPROOFhostcontrolsPROOF1234";
+  const host = await (await request("rooms", { method: "POST", accessKey, body: { inviteProof, displayName: "Host", provider: "youtube", controlMode: "host" } })).json();
+  const guestA = await (await request(`rooms/${host.roomId}`, { method: "POST", body: { inviteProof, displayName: "Guest A" } })).json();
+  const guestB = await (await request(`rooms/${host.roomId}`, { method: "POST", body: { inviteProof, displayName: "Guest B" } })).json();
+
+  // Guests cannot run host controls.
+  assert.equal((await request(`rooms/${host.roomId}/lock`, { method: "POST", token: guestA.participantToken, body: { locked: true } })).status, 403);
+  assert.equal((await request(`rooms/${host.roomId}/remove`, { method: "POST", token: guestA.participantToken, body: { participantId: guestB.participantId } })).status, 403);
+  assert.equal((await request(`rooms/${host.roomId}/transfer`, { method: "POST", token: guestA.participantToken, body: { participantId: guestB.participantId } })).status, 403);
+
+  // Lock blocks new joins with a distinct status and the roster reports it.
+  assert.equal((await (await request(`rooms/${host.roomId}/lock`, { method: "POST", token: host.participantToken, body: { locked: true } })).json()).locked, true);
+  assert.equal((await request(`rooms/${host.roomId}`, { method: "POST", body: { inviteProof, displayName: "Late" } })).status, 423);
+  const lockedEvents = await (await request(`rooms/${host.roomId}/events?after=0`, { token: guestA.participantToken })).json();
+  assert.equal(lockedEvents.locked, true);
+  assert.equal(lockedEvents.hostId, host.participantId);
+  assert.equal(lockedEvents.controlMode, "host");
+  await request(`rooms/${host.roomId}/lock`, { method: "POST", token: host.participantToken, body: { locked: false } });
+  assert.equal((await request(`rooms/${host.roomId}`, { method: "POST", body: { inviteProof, displayName: "Late" } })).status, 201);
+
+  // Remove deactivates the guest's token.
+  assert.equal((await request(`rooms/${host.roomId}/remove`, { method: "POST", token: host.participantToken, body: { participantId: guestB.participantId } })).status, 200);
+  assert.equal((await request(`rooms/${host.roomId}/events?after=0`, { token: guestB.participantToken })).status, 401);
+
+  // Transfer makes Guest A the host: the old host loses host-only events and the new host gains them.
+  assert.equal((await request(`rooms/${host.roomId}/transfer`, { method: "POST", token: host.participantToken, body: { participantId: guestA.participantId } })).status, 200);
+  const afterTransfer = await (await request(`rooms/${host.roomId}/events?after=0`, { token: host.participantToken })).json();
+  assert.equal(afterTransfer.hostId, guestA.participantId);
+  assert.equal(afterTransfer.participants.find((item) => item.id === guestA.participantId).role, "host");
+  assert.equal(afterTransfer.participants.find((item) => item.id === host.participantId).role, "guest");
+  assert.equal((await request(`rooms/${host.roomId}/events`, { method: "POST", token: host.participantToken, body: { payload: "room-locked:opaque.ciphertext" } })).status, 403);
+  assert.equal((await request(`rooms/${host.roomId}/events`, { method: "POST", token: guestA.participantToken, body: { payload: "sync-status:opaque.ciphertext" } })).status, 202);
+  assert.equal((await request(`rooms/${host.roomId}/events`, { method: "POST", token: guestA.participantToken, body: { payload: "kick:opaque.ciphertext" } })).status, 202);
+  assert.equal((await request(`rooms/${host.roomId}`, { method: "DELETE", token: host.participantToken })).status, 403, "the demoted host can no longer end the room");
+});
+
+test("the room promotes the longest-present guest when the host leaves or goes silent", async () => {
+  const inviteProof = "autopromotePROOFautopromotePROOF12345";
+  const host = await (await request("rooms", { method: "POST", accessKey, body: { inviteProof, displayName: "Host", provider: "netflix" } })).json();
+  const first = await (await request(`rooms/${host.roomId}`, { method: "POST", body: { inviteProof, displayName: "First Guest" } })).json();
+  await request(`rooms/${host.roomId}`, { method: "POST", body: { inviteProof, displayName: "Second Guest" } });
+  // Explicit leave hands over immediately.
+  const left = await (await request(`rooms/${host.roomId}/leave`, { method: "POST", token: host.participantToken, body: {} })).json();
+  assert.equal(left.newHostId, first.participantId);
+  const roster = await (await request(`rooms/${host.roomId}/events?after=0`, { token: first.participantToken })).json();
+  assert.equal(roster.hostId, first.participantId);
+  assert.equal(roster.participants[0].id, first.participantId, "host is listed first");
+  // A silent host (no poll for over 45 s) is replaced on the next poll.
+  environment.DB.sqlite.prepare("UPDATE watch_participants SET last_seen_at = ? WHERE id = ?").run(Date.now() - 60_000, first.participantId);
+  const secondToken = (await (await request(`rooms/${host.roomId}`, { method: "POST", body: { inviteProof, displayName: "Third Guest" } })).json()).participantToken;
+  const promoted = await (await request(`rooms/${host.roomId}/events?after=0`, { token: secondToken })).json();
+  assert.notEqual(promoted.hostId, first.participantId);
+  assert.ok(promoted.participants.some((item) => item.role === "host"), "a new host exists");
 });
