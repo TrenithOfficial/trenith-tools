@@ -14,13 +14,24 @@ export type RoomEventResponse = {
 type IceResponse = { iceServers: RTCIceServer[]; relay: boolean };
 
 async function watchRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`/api/watch/${path.replace(/^\//, "")}`, {
-    ...init,
-    cache: "no-store",
-    headers: { "content-type": "application/json", ...(init.headers || {}) },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api/watch/${path.replace(/^\//, "")}`, {
+      ...init,
+      cache: "no-store",
+      headers: { "content-type": "application/json", ...(init.headers || {}) },
+    });
+  } catch (error) {
+    if ((error as Error).name === "AbortError") throw error;
+    throw new WatchRequestError("You appear to be offline, or the room service could not be reached. Check your connection and try again.", 0);
+  }
   const body = await response.json().catch(() => ({})) as T & { error?: string; code?: string };
-  if (!response.ok) throw new WatchRequestError(body.error || `Room request failed (${response.status}).`, response.status, body.code);
+  if (!response.ok) {
+    // A proxy or worker outage returns a bare gateway status; say what it
+    // means instead of "Room request failed (502)".
+    const outage = response.status >= 500 && response.status !== 503 ? "The Watch Together room service is not responding right now. Try again in a minute." : response.status === 503 && !body.error ? "Watch Together is not configured on this deployment yet." : "";
+    throw new WatchRequestError(body.error || outage || `Room request failed (${response.status}).`, response.status, body.code);
+  }
   return body;
 }
 
