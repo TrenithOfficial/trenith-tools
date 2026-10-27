@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { providerDefinitions, useSessionConnections } from "../lib/byok";
+import { chatCompletionsUrl, providerDefinitions, useSessionConnections } from "../lib/byok";
 import { tools } from "../lib/catalog";
 import { extractPdfText } from "../lib/pdf-tools";
 
@@ -183,9 +183,9 @@ export function AiStudio() {
       if (connection.provider === "compatible") {
         if (!connection.endpoint) throw new Error("This connection is missing its HTTPS endpoint.");
         const body = sourceFile ? (() => { const form = new FormData(); form.set("file", sourceFile); form.set("prompt", prompt); form.set("model", connection.model); form.set("workflow", workflow); return form; })() : JSON.stringify({ model: connection.model, messages: [{ role: "user", content: prompt }], prompt, workflow });
-        response = await fetch(connection.endpoint, {
+        response = await fetch(sourceFile ? connection.endpoint : chatCompletionsUrl(connection.endpoint), {
           method: "POST",
-          headers: { ...(sourceFile ? {} : { "content-type": "application/json" }), Authorization: `Bearer ${connection.apiKey}` },
+          headers: { ...(sourceFile ? {} : { "content-type": "application/json" }), ...(connection.apiKey ? { Authorization: `Bearer ${connection.apiKey}` } : {}) },
           body,
         });
       } else {
@@ -206,8 +206,16 @@ export function AiStudio() {
       }
       const mime = response.headers.get("content-type") || "application/octet-stream";
       if (!response.ok) {
-        const detail = mime.includes("json") ? (await response.json() as { error?: string }).error : await response.text();
-        throw new Error(detail || `The provider returned HTTP ${response.status}.`);
+        let detail = "";
+        if (mime.includes("json")) {
+          const data = await response.json().catch(() => ({})) as { error?: string | { message?: string }; message?: string };
+          detail = typeof data.error === "string" ? data.error : data.error?.message || data.message || "";
+        } else {
+          // An HTML error page or a one-word body is not a useful message on its own.
+          const text = (await response.text()).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          detail = text && text.length <= 160 ? `HTTP ${response.status}: ${text}` : "";
+        }
+        throw new Error(detail || `The provider returned HTTP ${response.status}${response.status === 404 ? " — check the endpoint URL" : response.status === 401 || response.status === 403 ? " — check the API key" : ""}.`);
       }
       const label = briefMode ? "Structured plan from your text model. Connect a compatible media endpoint to run the finished job." : undefined;
       if (mime.includes("application/json")) {

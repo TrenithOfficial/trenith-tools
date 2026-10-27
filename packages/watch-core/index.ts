@@ -43,6 +43,10 @@ export type WatchProvider = {
   support: "launch" | "next" | "beta";
 };
 
+// Where people actually install the companion. Chrome and Edge both install
+// from the Chrome Web Store listing; Firefox has no signed build yet.
+export const WATCH_EXTENSION_STORE_URL = "https://chromewebstore.google.com/detail/trenith-watch-together/kfeooodicmideabhlmimaijjfkjhfojg";
+
 export const WATCH_PROVIDERS: WatchProvider[] = [
   { id: "youtube", name: "YouTube", homeUrl: "https://www.youtube.com/", hosts: ["youtube.com", "youtu.be"], region: "global", support: "launch" },
   { id: "netflix", name: "Netflix", homeUrl: "https://www.netflix.com/browse", hosts: ["netflix.com"], region: "global", support: "launch" },

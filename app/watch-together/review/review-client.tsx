@@ -62,10 +62,11 @@ export function ReviewClient() {
               <div><dt>Reason</dt><dd>{req.reason || "—"}</dd></div>
               <div><dt>Status</dt><dd className={`review-status status-${req.status}`}>{req.status}</dd></div>
             </dl>
-            {req.status !== "pending" && <p className="review-note">This request is already <strong>{req.status}</strong>. You can still change the decision below.</p>}
+            {req.status === "approved" && <p className="review-note">This request is already <strong>approved</strong> and the key has been sent. Approving again changes nothing; a key cannot be revoked from here.</p>}
+            {req.status === "rejected" && <p className="review-note">This request was <strong>rejected</strong>. You can still approve it, which mints and emails a key.</p>}
             <div className="review-actions">
               <button className="review-approve" disabled={phase === "working"} data-hint={hint === "approve"} onClick={() => decide("approve")}>Approve access</button>
-              <button className="review-reject" disabled={phase === "working"} data-hint={hint === "reject"} onClick={() => decide("reject")}>Reject</button>
+              <button className="review-reject" disabled={phase === "working" || req.status === "approved"} data-hint={hint === "reject"} onClick={() => decide("reject")}>Reject</button>
             </div>
             <p className="review-note small">Approving mints the access key and emails it to them. Nothing else changed until you clicked.</p>
           </>

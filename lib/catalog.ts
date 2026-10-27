@@ -22,8 +22,8 @@ export const tools: ToolDefinition[] = [
   },
   {
     slug: "audio-downloader", name: "Audio Downloader", shortName: "Audio Downloader", category: "Audio", kind: "web", icon: "↓", accent: "cyan",
-    description: "Discover direct public audio files exposed by a webpage or media URL without bypassing access controls.", formats: ["MP3", "WAV", "M4A", "AAC", "OGG", "FLAC", "OPUS"],
-    steps: ["Paste a public page or direct audio URL", "Review the audio links the source exposes", "Preview and download authorized files"],
+    description: "Find and save the audio a public page, podcast feed or direct link openly exposes — MP3, M4A, WAV, FLAC, OGG, Opus — without bypassing logins, DRM or streaming platforms.", formats: ["MP3", "WAV", "M4A", "AAC", "OGG", "FLAC", "OPUS", "RSS"],
+    steps: ["Paste a public page, podcast RSS feed or direct audio URL", "Review the files or episodes the source exposes", "Preview and download authorized files, singly or as one ZIP"],
   },
   {
     slug: "audio-joiner", name: "Audio Joiner", shortName: "Audio Joiner", category: "Audio", kind: "device", icon: "≋", accent: "violet",
@@ -97,18 +97,18 @@ export const tools: ToolDefinition[] = [
   },
   {
     slug: "rotate-pdf", name: "Rotate PDF", shortName: "Rotate PDF", category: "PDF", kind: "device", icon: "↻", accent: "cyan",
-    description: "Rotate every page clockwise and export a clean replacement PDF on your device.", formats: ["PDF"],
-    steps: ["Choose a PDF", "Rotate every page by 90 degrees", "Download the rotated file"],
+    description: "Rotate all pages or just the ones you pick by 90, 180 or 270 degrees and export a clean replacement PDF on your device.", formats: ["PDF"],
+    steps: ["Choose a PDF", "Pick 90°, 180° or 270° and optionally the pages", "Download the rotated file"],
   },
   {
     slug: "page-numbers", name: "Add PDF Page Numbers", shortName: "Page Numbers", category: "PDF", kind: "device", icon: "#", accent: "violet",
-    description: "Add centered page numbers and total page counts to an entire document.", formats: ["PDF"],
-    steps: ["Choose a PDF", "Apply consistent numbering", "Download the numbered document"],
+    description: "Add page numbers to a whole document — bottom or top, centred or in a corner, as 3, 3 / 12 or Page 3 of 12, starting from any number.", formats: ["PDF"],
+    steps: ["Choose a PDF", "Pick the position, format and first number", "Download the numbered document"],
   },
   {
     slug: "watermark-pdf", name: "Watermark PDF", shortName: "Watermark PDF", category: "PDF", kind: "device", icon: "W", accent: "blue",
-    description: "Apply a custom diagonal text watermark across every PDF page without uploading the document.", formats: ["PDF"],
-    steps: ["Choose a PDF", "Enter watermark text", "Apply and download"],
+    description: "Apply a custom text watermark across every PDF page with your own opacity, angle and size, without uploading the document.", formats: ["PDF"],
+    steps: ["Choose a PDF", "Enter the text and set opacity, angle and size", "Apply and download"],
   },
   {
     slug: "jpg-to-pdf", name: "JPG & PNG to PDF", shortName: "Images to PDF", category: "PDF", kind: "device", icon: "▧", accent: "rose",

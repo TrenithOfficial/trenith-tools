@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { downloadBlob } from "../lib/client-tools";
+import { filesFromDrop } from "./workspace-bits";
 import { canCleanMetadata, cleanAndVerify, classifyFields, inspectMetadata, routeFor, routeLabel, unsupportedReason, type FieldReport, type MetadataField, type RiskCategory } from "../lib/metadata-clean";
 
 type ScrubItem = {
@@ -85,9 +86,9 @@ export function MetadataScrubber() {
     }
   }
 
-  async function addFiles(fileList: FileList | null) {
+  async function addFiles(fileList: ArrayLike<File> | null) {
     if (!fileList?.length) return;
-    const additions: ScrubItem[] = [...fileList]
+    const additions: ScrubItem[] = Array.from(fileList)
       .sort((a, b) => a.webkitRelativePath.localeCompare(b.webkitRelativePath, undefined, { numeric: true }) || a.name.localeCompare(b.name, undefined, { numeric: true }))
       .map((file) => ({ id: crypto.randomUUID(), file, status: "queued" as const, before: [], report: emptyReport, after: [], afterReport: emptyReport, notes: [], embedded: 0, passes: 0 }));
     setItems((current) => [...current, ...additions]);
@@ -146,7 +147,7 @@ export function MetadataScrubber() {
   return <div className="metadata-workspace">
     <section className="workspace-panel metadata-intro">
       <div><span className="panel-label">PRIVACY SCRUBBER</span><h2>Inspect first. Remove second. Verify before download.</h2><p>Every file type gets the engine that can actually rewrite it: ExifTool for images and RAW, a lossless FFmpeg stream copy for audio and video, document rewriters for PDF, Word, Excel, PowerPoint, OpenDocument, EPUB, SVG, HTML and RTF, and a recursive pass through ZIP archives and the media embedded inside documents. Colour profiles, orientation and track languages are kept so nothing looks or plays differently.</p></div>
-      <div className="metadata-pickers"><button className="file-picker" onClick={() => input.current?.click()}><span>＋</span><strong>Choose any files</strong><small>Images, RAW, audio, video, documents, archives</small></button><button className="file-picker" onClick={() => folderInput.current?.click()}><span>▦</span><strong>Choose a folder</strong><small>Preserves folder-relative names in ZIP export</small></button></div>
+      <div className="metadata-pickers"><button className="file-picker" onClick={() => input.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void filesFromDrop(event.dataTransfer).then((dropped) => addFiles(dropped)); }}><span>＋</span><strong>Choose any files</strong><small>Images, RAW, audio, video, documents, archives</small></button><button className="file-picker" onClick={() => folderInput.current?.click()} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); void filesFromDrop(event.dataTransfer).then((dropped) => addFiles(dropped)); }}><span>▦</span><strong>Choose a folder</strong><small>Preserves folder-relative names in ZIP export</small></button></div>
       <input ref={input} className="sr-only" type="file" multiple onChange={(event) => { void addFiles(event.target.files); event.currentTarget.value = ""; }} />
       <input ref={(node) => { folderInput.current = node; if (node) node.setAttribute("webkitdirectory", ""); }} className="sr-only" type="file" multiple onChange={(event) => { void addFiles(event.target.files); event.currentTarget.value = ""; }} />
       <div className="metadata-engine"><span className={engineReady ? "status-dot" : "engine-dot"} /><strong>{engineReady ? "Private cleaning engines ready" : busy ? "Loading the private cleaning engine…" : "Engines load only after you select a file"}</strong><small>No file content is sent to Trenith. The media engine (about 31 MB) loads on first use for audio and video.</small></div>

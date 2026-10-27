@@ -32,10 +32,31 @@ function validateNetworkTarget(input: string) {
 // not, because CDNs commonly 302 an .mp3 link to a presigned, extensionless URL
 // (S3/CloudFront, podcast trackers). Re-imposing the extension gate on those
 // hops made the scanner list files that this proxy then refused to download.
+// Extensionless sources (podcast players, <audio src="/stream?id=…">, og:audio)
+// are allowed through; the response's Content-Type decides whether it was
+// audio at all, so this proxy still never relays arbitrary web pages.
 function validateAudioUrl(input: string) {
-  const url = validateNetworkTarget(input);
-  if (!AUDIO_PATTERN.test(url.pathname + url.search)) throw new Error("Unsupported audio URL.");
-  return url;
+  return validateNetworkTarget(input);
+}
+
+const AUDIO_MIME = /^audio\/|^application\/(ogg|x-mpegurl|octet-stream)$|^video\/(webm|mp4|ogg)$/i;
+
+function isAudioResponse(response: Response, finalUrl: URL) {
+  const type = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (/^audio\//.test(type)) return true;
+  if (AUDIO_PATTERN.test(finalUrl.pathname + finalUrl.search)) return !type || AUDIO_MIME.test(type);
+  return false;
+}
+
+// A caller-suggested filename is used only for the Content-Disposition header,
+// after the same hardening as the URL-derived name, and only with an audio
+// extension so a crafted name cannot turn the download into a script file.
+function suggestedName(raw: string | null, fallback: string, type: string) {
+  const cleaned = safeDecode(raw || "").replace(/[\\/:*?"<>|]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 160);
+  if (!cleaned) return fallback;
+  if (AUDIO_PATTERN.test(cleaned)) return cleaned;
+  const extension = type.match(/^audio\/(?:x-)?([a-z0-9]+)/i)?.[1]?.replace(/^mpeg$/i, "mp3").replace(/^mp4$/i, "m4a") || fallback.match(AUDIO_PATTERN)?.[1] || "mp3";
+  return `${cleaned}.${extension}`;
 }
 
 // Enforce the size limit on the bytes actually streamed. A source can omit or
@@ -96,13 +117,16 @@ export async function GET(request: NextRequest) {
     if (announced > MAX_PROXY_BYTES) throw new Error("The source file is larger than the download proxy allows.");
     const finalUrl = new URL(response.url || url.href);
     if (isPrivateHost(finalUrl.hostname)) throw new Error("The audio source redirected to a private address.");
+    if (!isAudioResponse(response, finalUrl)) throw new Error("The source did not return an audio file.");
+    const type = response.headers.get("content-type") || "application/octet-stream";
     // Strip control characters as well as separator characters so a crafted
     // path can never inject additional response-header content.
-    const filename = safeDecode(finalUrl.pathname.split("/").pop() || "audio.mp3").replace(/[\\/:*?\"<>|]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "");
+    const derived = safeDecode(finalUrl.pathname.split("/").pop() || "").replace(/[\\/:*?\"<>|]/g, "-").replace(/[\u0000-\u001f\u007f]/g, "");
+    const filename = suggestedName(request.nextUrl.searchParams.get("name"), AUDIO_PATTERN.test(derived) ? derived : suggestedName(derived || "audio", "audio.mp3", type), type);
 
     return new NextResponse(cappedStream(response.body, MAX_PROXY_BYTES), {
       headers: {
-        "Content-Type": response.headers.get("content-type") || "application/octet-stream",
+        "Content-Type": type,
         "Content-Disposition": `attachment; filename="${filename.slice(0, 180)}"`,
         "Cache-Control": "private, max-age=0",
       },

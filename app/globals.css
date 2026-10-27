@@ -825,3 +825,17 @@ h1 em,h2 em { color: #77727d; }
 .watch-participant-list > div { grid-template-columns: 32px 1fr auto; }
 .watch-participant-list i { width: 6px; height: 6px; border-radius: 50%; }
 .watch-player-actions { flex-wrap: wrap; }
+
+
+/* Public-source scanner: what works, what does not */
+.source-guide { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; margin-top: 18px; }
+.source-guide > div { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; background: var(--surface-solid); }
+.source-guide strong { display: block; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.source-guide ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; line-height: 1.5; }
+
+/* Option chips inside light output panels (PDF rotate etc.) */
+.chip-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.output-panel .chip { color: var(--text); background: var(--surface-high); }
+.output-panel .chip.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+.output-panel .editor-group { margin-top: 10px; }
+.field-hint { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.5; font-weight: 500; }

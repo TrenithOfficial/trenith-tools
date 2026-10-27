@@ -118,3 +118,17 @@ test("blocks private-network download proxying", async () => {
   assert.equal(response.status, 400);
   assert.match(await response.text(), /Unsupported/i);
 });
+
+test("the saved accent palette is applied before paint and social previews are 1200x630", async () => {
+  const home = await (await worker.fetch(new Request("http://localhost/", { headers: { accept: "text/html" } }), environment, context)).text();
+  assert.match(home, /localStorage\.getItem\("trenith-color-theme"\)/, "inline theme script present in <head>");
+  assert.match(home, /og:image:width" content="1200"/);
+  assert.match(home, /\/og\/default\.jpg/);
+  const tool = await (await worker.fetch(new Request("http://localhost/tools/video-converter", { headers: { accept: "text/html" } }), environment, context)).text();
+  assert.match(tool, /\/og\/video-converter\.jpg/);
+  const { stat } = await import("node:fs/promises");
+  for (const name of ["default", "watch-together", "video-converter", "metadata-remover"]) {
+    const size = (await stat(new URL(`../public/og/${name}.jpg`, import.meta.url))).size;
+    assert.ok(size > 10_000 && size < 200_000, `${name}.jpg is a real image (${size} bytes)`);
+  }
+});

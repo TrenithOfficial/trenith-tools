@@ -54,8 +54,26 @@ export function safeStem(name: string, fallback = "trenith-output") {
   return name.replace(/\.[^.]+$/, "").replace(/[^a-z0-9-_]+/gi, "-").replace(/^-+|-+$/g, "").slice(0, 80) || fallback;
 }
 
-export async function runFfmpeg(job: FfmpegJob): Promise<FfmpegResult> {
+// One engine, one job at a time. The FFmpeg worker already executes commands
+// in order, but log and progress listeners are attached per job: two jobs in
+// flight at once would each capture the other's output (a probe of clip B then
+// reads clip A's streams and the "lossless" join concatenates mismatched
+// codecs into a corrupt file). Callers may still fire jobs concurrently; they
+// are queued here.
+let engineQueue: Promise<unknown> = Promise.resolve();
+
+export function serializeEngineJob<T>(work: () => Promise<T>): Promise<T> {
+  const run = engineQueue.then(work, work);
+  engineQueue = run.catch(() => undefined);
+  return run;
+}
+
+export function runFfmpeg(job: FfmpegJob): Promise<FfmpegResult> {
   for (const input of job.inputs) if (input.data instanceof File) assertEngineCapacity(input.data);
+  return serializeEngineJob(() => executeFfmpegJob(job));
+}
+
+async function executeFfmpegJob(job: FfmpegJob): Promise<FfmpegResult> {
   let staged = 0;
   const ffmpeg = await getFfmpeg(job.progress);
   const id = token();

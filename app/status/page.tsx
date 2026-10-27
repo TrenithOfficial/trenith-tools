@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 const engineNotes: Record<string, string> = {
   "metadata-remover": "Per-format engines · ExifTool for images and RAW (colour profile and orientation kept), FFmpeg lossless stream copy for every audio/video container, document rewriters for PDF, Office, OpenDocument, EPUB, SVG, HTML and RTF, recursive ZIP and embedded-media cleaning; every result is re-scanned and classified",
-  "audio-downloader": "Public URL scanner · no login, DRM or access-control bypass",
+  "audio-downloader": "Public URL scanner · direct files, HTML5 players, podcast RSS/Atom feeds · names streaming platforms instead of failing · no login, DRM or access-control bypass",
   "audio-joiner": "Web Audio with FFmpeg compatibility fallback · direct-to-disk mode for large jobs",
   "audio-converter": "FFmpeg WebAssembly · MP3, M4A/AAC, WAV, FLAC, ALAC, AIFF, Ogg, Opus, WebM, WavPack, AC3 and WMA · batch with ZIP · tags and cover art kept",
   "audio-trimmer": "FFmpeg lossless stream-copy cut (frame-accurate to ~26 ms) or re-encode to any format · Web Audio WAV path kept",

@@ -23,6 +23,22 @@ export const providerDefinitions: Record<ProviderId, { name: string; description
   compatible: { name: "Compatible endpoint", description: "Use an OpenAI-compatible HTTPS endpoint that permits browser CORS.", defaultModel: "model-name", keyLabel: "Endpoint API key" },
 };
 
+// People paste either a base URL (https://api.groq.com/openai/v1) or the full
+// chat-completions URL. Text requests need the latter; file workflows post to
+// whatever was entered, since custom media endpoints have their own routes.
+export function chatCompletionsUrl(endpoint: string): string {
+  try {
+    const url = new URL(endpoint.trim());
+    const path = url.pathname.replace(/\/+$/, "");
+    if (/\/(chat\/completions|completions|messages|responses|generate|generateContent)$/i.test(path)) return url.href;
+    if (/\/v\d+[a-z]*$/i.test(path) || /\/openai$/i.test(path)) { url.pathname = `${path}/chat/completions`; return url.href; }
+    if (path === "" || path === "/") { url.pathname = "/v1/chat/completions"; return url.href; }
+    return url.href;
+  } catch {
+    return endpoint;
+  }
+}
+
 const SESSION_KEY = "trenith-byok-session";
 const ENCRYPTED_KEY = "trenith-byok-encrypted";
 

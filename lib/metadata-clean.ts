@@ -290,7 +290,7 @@ export async function stripMediaMetadata(file: File, progress?: (message: string
 
 export async function stripPdfMetadata(file: File): Promise<Blob> {
   const { PDFName, PDFDict, PDFStream, PDFString } = await import("pdf-lib");
-  const document = await loadPdfDocument(await file.arrayBuffer());
+  const document = await loadPdfDocument(await file.arrayBuffer(), { name: file.name });
   const context = document.context;
   const trailerInfo = context.trailerInfo as { Info?: unknown; ID?: unknown };
   delete trailerInfo.Info;

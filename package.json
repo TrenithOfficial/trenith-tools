@@ -24,7 +24,7 @@
     "test:watch": "node --test tests/watch-*.test.mjs",
     "test:e2e:watch": "node tests/e2e/watch-together.e2e.mjs",
     "validate:artifact": "bash scripts/validate-artifact.sh",
-    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .output-e2e --ignore-pattern .wxt --ignore-pattern public/ffmpeg --ignore-pattern public/pdf",
+    "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .output --ignore-pattern .output-e2e --ignore-pattern .wxt --ignore-pattern .wrangler --ignore-pattern public/ffmpeg --ignore-pattern public/pdf",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "watch:d1:create": "wrangler d1 create trenith-watch",

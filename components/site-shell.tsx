@@ -35,6 +35,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const [themeOpen, setThemeOpen] = useState(false);
   const [theme, setTheme] = useState("porcelain");
 
+  // The inline script in the root layout has already applied the saved palette
+  // to <html> before paint; this only syncs React's copy so the menu shows the
+  // right selection. Writing the attribute here again would flash the default.
   useEffect(() => {
     const stored = localStorage.getItem("trenith-color-theme");
     const saved = themes.some(([id]) => id === stored) ? stored! : "porcelain";
@@ -42,9 +45,12 @@ export function SiteShell({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+  const choosePalette = (id: string) => {
+    document.documentElement.setAttribute("data-theme", id);
+    localStorage.setItem("trenith-color-theme", id);
+    setTheme(id);
+    setThemeOpen(false);
+  };
 
   return (
     <>
@@ -71,7 +77,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
           <div className="color-menu" role="menu">
             <strong>Accent palette</strong>
             {themes.map(([id, label, color]) => (
-              <button key={id} className={theme === id ? "selected" : ""} onClick={() => { setTheme(id); localStorage.setItem("trenith-color-theme", id); setThemeOpen(false); }} role="menuitem">
+              <button key={id} className={theme === id ? "selected" : ""} onClick={() => choosePalette(id)} role="menuitem">
                 <i style={{ background: color }} />{label}<span>✓</span>
               </button>
             ))}

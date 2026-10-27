@@ -4,7 +4,7 @@ A free, light-first platform for file privacy, media, PDFs, images, music utilit
 
 ## Working tools
 
-- Public audio discovery and authorized direct downloads
+- Public audio discovery and authorized direct downloads: direct files, HTML5 players, podcast RSS/Atom feeds (episodes listed by title) and open directories; streaming platforms are named and explained instead of failing silently
 - Metadata inspection, removal, verification and ZIP export with a per-format engine for every file family: ExifTool for images and RAW (colour profile and orientation preserved), a lossless FFmpeg stream copy for every audio/video container (track languages restored), a PDF rewriter that anonymizes annotation authors and physically removes orphaned objects from earlier saves, Office package scrubbing (core/app/custom properties, people lists, thumbnails, revision ids, comment and tracked-change authors, template and mail-merge links, Excel absolute save paths, threaded-comment identities), OpenDocument, EPUB, SVG, HTML and RTF rewriters, and recursive ZIP cleaning that also reaches the media embedded inside documents. Every result is re-verified and reported by risk category.
 - Audio folder/file joining with native decoding, FFmpeg compatibility fallback and direct-to-disk WAV/RF64 streaming for large jobs
 - Audio conversion to MP3, M4A/AAC, WAV, FLAC, ALAC, AIFF, Ogg Vorbis, Opus, WebM, WavPack, AC3 and WMA — single files or whole folders with one-ZIP download, sample-rate/channel/bit-depth options, tags and cover art carried over
@@ -20,12 +20,12 @@ A free, light-first platform for file privacy, media, PDFs, images, music utilit
 - Free BYOK Connections Vault and AI Studio for OpenAI, Anthropic, Gemini, ElevenLabs, OpenRouter and compatible endpoints
 - Compatible endpoint media jobs support JSON briefs and multipart source-file uploads
 - Consent-gated Vercel/Google analytics and marketing measurement with Global Privacy Control support
-- Global and India canonicals/hreflang, structured data, localized sitemaps, robots, web manifest, guides, capability status, changelog/RSS, a public tool catalog API, `llms.txt` and `llms-full.txt`
+- Global and India canonicals/hreflang, structured data, localized sitemaps, robots, web manifest, guides, capability status, changelog/RSS, a public tool catalog API, `llms.txt`, `llms-full.txt` and 1200×630 social preview images per tool (`public/og/`, regenerated with `python3 scripts/og-images.py`)
 - Global privacy, terms, cookie, privacy choices, security, subprocessors, copyright and accessibility disclosures
 - Watch Together rooms for authorized OTT websites with encrypted playback signals, chat, reactions and temporary membership
 - Protocol 2 sync: server clock alignment, latency-projected seeks, a host heartbeat while playing, per-participant drift display with one-click resync, host handover (manual, and automatic when the host disappears), lock and remove
 - Optional peer-to-peer camera and microphone for up to 6 people, and playback synchronization for up to 25
-- Cross-browser Manifest V3 companion 1.1.0 for Chrome, Edge and Firefox with optional per-site access, a Netflix page-API adapter, no screen capture and no remote code
+- Cross-browser Manifest V3 companion 1.1.0 for Chrome, Edge and Firefox with optional per-site access, a Netflix page-API adapter, no screen capture and no remote code — published for Chrome/Edge on the [Chrome Web Store](https://chromewebstore.google.com/detail/trenith-watch-together/kfeooodicmideabhlmimaijjfkjhfojg); the Firefox build is not yet signed
 
 Core file tools process source files in the browser. There is no arbitrary application-level file-count limit; usable capacity depends on the device, browser memory and browser codec support.
 

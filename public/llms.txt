@@ -10,6 +10,7 @@ India regional site: https://tools.trenith.in
 - /watch-together — free synchronized OTT watch rooms with encrypted chat, optional camera and microphone
 - /watch-together/supported — current provider/browser compatibility and extension setup
 - /tools/metadata-remover — local metadata inspection, removal and verification for images, RAW, every audio/video container, PDF, Office, OpenDocument, EPUB, SVG, HTML, RTF and ZIP (embedded media included)
+- /tools/audio-downloader — public-source scanner for direct audio files, HTML5 players and podcast RSS/Atom feeds; streaming platforms are explained, never bypassed
 - /tools/video-converter — MP4, WebM, MKV and MOV conversion with lossless remuxing when codecs fit
 - /tools/video-compressor — H.264 compression by quality or target size
 - /tools/video-trimmer — keyframe-exact lossless or frame-accurate cuts
