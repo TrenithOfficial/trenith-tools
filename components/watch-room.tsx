@@ -5,7 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "re
 import { useRouter } from "next/navigation";
 import { clearRoomSession, endRoom, getIceServers, getRoomEvents, joinRoom, leaveRoom, loadRoomSession, removeParticipant, saveRoomSession, sendRoomEvent, setRoomLock, transferHost } from "../lib/watch-client";
 import { decryptWatchMessage, encryptWatchMessage, importWatchRoomKey } from "../lib/watch-crypto";
-import {
+import { WATCH_EXTENSION_STORE_URL,
   WATCH_HEARTBEAT_MS, WATCH_MEDIA_PARTICIPANT_LIMIT, WATCH_PROVIDERS, WATCH_STATUS_MS, WATCH_SYNC_PARTICIPANT_LIMIT,
   describeDrift, estimateClockOffset, projectPlaybackPosition, smoothClockOffset,
   type PlaybackSnapshot, type WatchParticipant, type WatchPlaybackAction, type WatchRoomMessage, type WatchRoomSession,
@@ -502,7 +502,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         <div className="watch-player-card">
           <div className="watch-player-art"><div className="watch-signal-rings"><i /><i /><i /><span>{player.paused ? "Ⅱ" : "▶"}</span></div><p>The movie stays in your {provider.name} tab.<br />This room carries only timing and social signals.</p></div>
           <div className="watch-timeline"><span>{clock(player.currentTime)}</span><div><i style={{ width: `${progress}%` }} /></div><span>{player.duration ? clock(player.duration) : "--:--:--"}</span></div>
-          <div className="watch-player-actions"><button onClick={() => window.postMessage({ source: "TRENITH_WATCH_WEB", command: "connect-player", payload: { provider: provider.id } }, location.origin)}>Connect streaming tab</button><a href={provider.homeUrl} target="_blank" rel="noreferrer">Open {provider.name} ↗</a>{isHost && <button onClick={() => void resyncEveryone()} disabled={!player.connected}>Resync everyone</button>}{extensionState === "missing" && <Link href="/watch-together/supported#setup">Install the companion</Link>}</div>
+          <div className="watch-player-actions"><button onClick={() => window.postMessage({ source: "TRENITH_WATCH_WEB", command: "connect-player", payload: { provider: provider.id } }, location.origin)}>Connect streaming tab</button><a href={provider.homeUrl} target="_blank" rel="noreferrer">Open {provider.name} ↗</a>{isHost && <button onClick={() => void resyncEveryone()} disabled={!player.connected}>Resync everyone</button>}{extensionState === "missing" && <a href={WATCH_EXTENSION_STORE_URL} target="_blank" rel="noreferrer">Install the companion ↗</a>}</div>
         </div>
         <div className="watch-video-section"><div className="watch-section-head"><div><span>LIVE LOUNGE</span><h2>Camera and voice</h2></div><small>{mediaAllowed ? `Peer-to-peer · ${relayAvailable ? "TURN recovery ready" : "direct connection"}` : `Media paused above ${WATCH_MEDIA_PARTICIPANT_LIMIT} people`}</small></div>
           <div className="watch-video-grid">

@@ -213,3 +213,14 @@ function crc32(buffer) {
   for (const byte of buffer) { crc ^= byte; for (let bit = 0; bit < 8; bit += 1) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1)); }
   return crc ^ -1;
 }
+
+test("engine jobs run one at a time even when callers fire them concurrently", async () => {
+  const { serializeEngineJob } = await import("../lib/media-engine.ts");
+  const order = [];
+  const job = (name, ms) => serializeEngineJob(async () => { order.push(`${name}:start`); await new Promise((resolve) => setTimeout(resolve, ms)); order.push(`${name}:end`); return name; });
+  const results = await Promise.all([job("a", 30), job("b", 5), job("c", 1)]);
+  assert.deepEqual(results, ["a", "b", "c"]);
+  assert.deepEqual(order, ["a:start", "a:end", "b:start", "b:end", "c:start", "c:end"]);
+  await assert.rejects(serializeEngineJob(async () => { throw new Error("boom"); }), /boom/);
+  assert.equal(await serializeEngineJob(async () => "after-failure"), "after-failure", "a failed job does not block the queue");
+});

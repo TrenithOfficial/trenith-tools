@@ -4,7 +4,7 @@ import { JsonLd } from "../../components/json-ld";
 import { guides } from "../../lib/guides";
 import { alternateUrls, siteUrl } from "../../lib/site";
 
-export const metadata: Metadata = { title: "Free File & BYOK AI Guides", description: "Practical guides for metadata privacy, audio and video conversion, large audio folders, PDF compression, watch-party sync, local browser processing and BYOK AI.", alternates: alternateUrls("/guides") };
+export const metadata: Metadata = { title: "Free File & BYOK AI Guides", description: "Practical guides for metadata privacy, audio and video conversion, large audio folders, PDF compression, watch-party sync, local browser processing and BYOK AI.", alternates: alternateUrls("/guides"), openGraph: { images: [{ url: "/og/guides.jpg", width: 1200, height: 630, alt: "Trenith field guides" }] }, twitter: { card: "summary_large_image", images: ["/og/guides.jpg"] } };
 
 export default function GuidesPage() { return <>
   <JsonLd data={{ "@context": "https://schema.org", "@type": "CollectionPage", name: "Trenith Tools guides", url: siteUrl("/guides"), hasPart: guides.map((guide) => ({ "@type": "Article", name: guide.title, url: siteUrl(`/guides/${guide.slug}`) })) }} />

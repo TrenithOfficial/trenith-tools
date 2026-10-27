@@ -11,13 +11,18 @@ export type ProgressHandler = (percent: number, message: string) => void;
 
 // pdf-lib rejects any encrypted PDF (even ones that open with no password) and
 // its raw error tells the user to call a JavaScript API they cannot reach.
-export async function loadPdfDocument(bytes: ArrayBuffer, options: { updateMetadata?: boolean } = {}): Promise<PDFDocumentType> {
+export async function loadPdfDocument(bytes: ArrayBuffer, options: { updateMetadata?: boolean; name?: string } = {}): Promise<PDFDocumentType> {
   const { PDFDocument } = await import("pdf-lib");
+  const label = options.name ? `"${options.name}"` : "This file";
   try {
     return await PDFDocument.load(bytes, { ignoreEncryption: false, updateMetadata: options.updateMetadata ?? false });
   } catch (error) {
-    if (error instanceof Error && /encrypt/i.test(error.message)) {
-      throw new Error("This PDF is password-protected or encrypted, so it can't be processed in the browser. Remove its protection first (open it and re-save or print to PDF), then try again.");
+    const message = error instanceof Error ? error.message : String(error);
+    if (/encrypt/i.test(message)) {
+      throw new Error(`${label} is password-protected or encrypted, so it can't be processed in the browser. Remove its protection first (open it and re-save or print to PDF), then try again.`);
+    }
+    if (/No PDF header|Failed to parse PDF|Expected instance of PDF|trailer|xref/i.test(message)) {
+      throw new Error(`${label} is not a readable PDF. It may be a different file type with a .pdf name, a truncated download, or a damaged file — try opening and re-saving it in a PDF viewer.`);
     }
     throw error;
   }
@@ -186,7 +191,7 @@ export async function recompressPdfImages(document: PDFDocumentType, options: Co
 export async function compressPdfImages(file: File, options: CompressOptions, progress: ProgressHandler): Promise<CompressResult> {
   progress(4, "Reading the document");
   const source = await file.arrayBuffer();
-  const document = await loadPdfDocument(source);
+  const document = await loadPdfDocument(source, { name: file.name });
   const { touched, skipped } = await recompressPdfImages(document, options, progress);
   progress(92, "Removing orphaned objects and rewriting the structure");
   const swept = await sweepUnreachable(document);
@@ -230,7 +235,9 @@ async function openWithPdfJs(bytes: ArrayBuffer) {
       iccUrl: "/pdf/iccs/",
     }).promise;
   } catch (error) {
-    if (error instanceof Error && /password/i.test(error.name + error.message)) throw new Error("This PDF needs a password to open, so it can't be processed in the browser.");
+    const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
+    if (/password/i.test(text)) throw new Error("This PDF needs a password to open, so it can't be processed in the browser.");
+    if (/InvalidPDF|Invalid PDF|FormatError|UnexpectedResponse/i.test(text)) throw new Error("This file is not a readable PDF. It may be a different file type with a .pdf name, a truncated download, or a damaged file.");
     throw error;
   }
 }

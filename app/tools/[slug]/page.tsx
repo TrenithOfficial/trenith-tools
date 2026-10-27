@@ -42,8 +42,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       ...(tool.formats || []),
     ],
     alternates: alternateUrls(`/tools/${tool.slug}`),
-    openGraph: { title: `Free ${tool.name} | Trenith Tools`, description, url: siteUrl(`/tools/${tool.slug}`), type: "website" },
-    twitter: { card: "summary_large_image", title: `Free ${tool.name} Online`, description: tool.description },
+    openGraph: { title: `Free ${tool.name} | Trenith Tools`, description, url: siteUrl(`/tools/${tool.slug}`), type: "website", images: [{ url: `/og/${tool.slug}.jpg`, width: 1200, height: 630, alt: `${tool.name} — free ${tool.category.toLowerCase()} tool on Trenith Tools` }] },
+    twitter: { card: "summary_large_image", title: `Free ${tool.name} Online`, description: tool.description, images: [`/og/${tool.slug}.jpg`] },
   };
 }
 

@@ -433,7 +433,7 @@ export function parsePageSelection(value: string, totalPages: number) {
   return indexes;
 }
 
-const loadPdf = (bytes: ArrayBuffer) => loadPdfDocument(bytes, { updateMetadata: true });
+const loadPdf = (bytes: ArrayBuffer, name?: string) => loadPdfDocument(bytes, { updateMetadata: true, name });
 
 export async function mergePdfFiles(files: File[], progress: ProgressHandler) {
   if (files.length < 2) throw new Error("Choose at least two PDF files to merge.");
@@ -441,7 +441,7 @@ export async function mergePdfFiles(files: File[], progress: ProgressHandler) {
   const output = await PDFDocument.create();
   for (let index = 0; index < files.length; index += 1) {
     progress(Math.round((index / files.length) * 90), `Adding ${files[index].name}`);
-    const source = await loadPdf(await files[index].arrayBuffer());
+    const source = await loadPdf(await files[index].arrayBuffer(), files[index].name);
     const pages = await output.copyPages(source, source.getPageIndices());
     pages.forEach((page) => output.addPage(page));
   }
@@ -451,7 +451,7 @@ export async function mergePdfFiles(files: File[], progress: ProgressHandler) {
 
 export async function extractPdfPages(file: File, selection: string, progress: ProgressHandler) {
   const { PDFDocument } = await import("pdf-lib");
-  const source = await loadPdf(await file.arrayBuffer());
+  const source = await loadPdf(await file.arrayBuffer(), file.name);
   const indexes = parsePageSelection(selection, source.getPageCount());
   if (!indexes.length) throw new Error(`Enter pages between 1 and ${source.getPageCount()}, for example 1-3,5.`);
   progress(45, "Extracting selected pages");
@@ -464,7 +464,7 @@ export async function extractPdfPages(file: File, selection: string, progress: P
 
 export async function splitPdfToZip(file: File, progress: ProgressHandler) {
   const [{ PDFDocument }, { default: JSZip }] = await Promise.all([import("pdf-lib"), import("jszip")]);
-  const source = await loadPdf(await file.arrayBuffer());
+  const source = await loadPdf(await file.arrayBuffer(), file.name);
   const zip = new JSZip();
   for (let index = 0; index < source.getPageCount(); index += 1) {
     progress(Math.round((index / source.getPageCount()) * 80), `Creating page ${index + 1}`);
@@ -479,17 +479,39 @@ export async function splitPdfToZip(file: File, progress: ProgressHandler) {
   return blob;
 }
 
+export type PdfTransformOptions = {
+  // rotate: 90, 180 or 270 degrees clockwise; pages: a selection string such as
+  // "1-3,7" (empty = every page).
+  angle?: 90 | 180 | 270;
+  pages?: string;
+  // number: where the label goes, how it reads, and the number the first page gets.
+  position?: "bottom-center" | "bottom-right" | "bottom-left" | "top-center" | "top-right";
+  numberFormat?: "n" | "n-of-total" | "page-n-of-total";
+  startAt?: number;
+  // watermark: opacity 0.05–1, angle in degrees, and a size multiplier.
+  opacity?: number;
+  watermarkAngle?: number;
+  scale?: number;
+};
+
 export async function transformPdf(
   file: File,
   mode: "rotate" | "number" | "watermark" | "compress",
   value: string,
   progress: ProgressHandler,
+  options: PdfTransformOptions = {},
 ) {
   const { StandardFonts, degrees, rgb } = await import("pdf-lib");
-  const document = await loadPdf(await file.arrayBuffer());
+  const document = await loadPdf(await file.arrayBuffer(), file.name);
   const pages = document.getPages();
   const font = mode === "number" || mode === "watermark" ? await document.embedFont(StandardFonts.HelveticaBold) : null;
   const watermarkLabel = mode === "watermark" ? (value.trim() || "TRENITH") : "";
+  const selected = new Set(options.pages?.trim() ? parsePageSelection(options.pages, pages.length) : pages.map((_, index) => index));
+  if (mode === "rotate" && options.pages?.trim() && !selected.size) throw new Error(`Enter pages between 1 and ${pages.length}, for example 1-3,5.`);
+  const angle = options.angle ?? 90;
+  const position = options.position ?? "bottom-center";
+  const numberFormat = options.numberFormat ?? "n-of-total";
+  const startAt = Number.isFinite(options.startAt) ? Math.max(0, Math.floor(options.startAt!)) : 1;
   // The built-in Helvetica font uses WinAnsi encoding and throws on any code
   // point it can't encode (Chinese, Cyrillic, Arabic, emoji…). Validate the
   // user's watermark once, up front, so those users get a clear message instead
@@ -503,23 +525,37 @@ export async function transformPdf(
   }
   pages.forEach((page, index) => {
     progress(Math.round((index / Math.max(1, pages.length)) * 90), `Processing page ${index + 1}`);
-    if (mode === "rotate") page.setRotation(degrees((page.getRotation().angle + 90) % 360));
+    if (mode === "rotate" && selected.has(index)) page.setRotation(degrees((page.getRotation().angle + angle) % 360));
     if (mode === "number" && font) {
-      const label = `${index + 1} / ${pages.length}`;
+      const current = startAt + index;
+      const total = startAt + pages.length - 1;
+      const label = numberFormat === "n" ? String(current) : numberFormat === "page-n-of-total" ? `Page ${current} of ${total}` : `${current} / ${total}`;
       const size = 10;
-      page.drawText(label, { x: (page.getWidth() - font.widthOfTextAtSize(label, size)) / 2, y: 18, size, font, color: rgb(.25, .28, .34) });
+      const width = font.widthOfTextAtSize(label, size);
+      const margin = 24;
+      const x = position.endsWith("center") ? (page.getWidth() - width) / 2 : position.endsWith("right") ? page.getWidth() - margin - width : margin;
+      const y = position.startsWith("top") ? page.getHeight() - margin : 18;
+      page.drawText(label, { x, y, size, font, color: rgb(.25, .28, .34) });
     }
     if (mode === "watermark" && font) {
       const label = watermarkLabel;
-      const size = Math.max(22, Math.min(70, page.getWidth() / Math.max(5, label.length) * 1.5));
+      const scale = Math.max(.4, Math.min(2.5, options.scale ?? 1));
+      const size = Math.max(14, Math.min(120, page.getWidth() / Math.max(5, label.length) * 1.5 * scale));
+      const tilt = Number.isFinite(options.watermarkAngle) ? options.watermarkAngle! : -32;
+      const width = font.widthOfTextAtSize(label, size);
+      // pdf-lib rotates around the text origin (its bottom-left corner), so
+      // offset that origin to keep the rotated label centred on the page.
+      const radians = tilt * Math.PI / 180;
+      const x = page.getWidth() / 2 - (width / 2) * Math.cos(radians) + (size / 3) * Math.sin(radians);
+      const y = page.getHeight() / 2 - (width / 2) * Math.sin(radians) - (size / 3) * Math.cos(radians);
       page.drawText(label, {
-        x: (page.getWidth() - font.widthOfTextAtSize(label, size)) / 2,
-        y: page.getHeight() / 2,
+        x,
+        y,
         size,
         font,
         color: rgb(.22, .28, .65),
-        opacity: .18,
-        rotate: degrees(-32),
+        opacity: Math.max(.05, Math.min(1, options.opacity ?? .18)),
+        rotate: degrees(tilt),
       });
     }
   });

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import {
   ByokConnection,
+  chatCompletionsUrl,
   clearEncryptedConnections,
   providerDefinitions,
   ProviderId,
@@ -41,7 +42,7 @@ export function ConnectionVault() {
 
   function saveSession() {
     setError(""); setStatus("");
-    if (!apiKey.trim()) { setError("Enter the API key supplied by your provider."); return; }
+    if (!apiKey.trim() && provider !== "compatible") { setError("Enter the API key supplied by your provider."); return; }
     if (!model.trim()) { setError("Enter the model identifier used by your provider."); return; }
     if (provider === "compatible" && !/^https:\/\//i.test(endpoint)) { setError("A compatible endpoint must use a complete HTTPS URL."); return; }
     const connection: ByokConnection = { id: crypto.randomUUID(), provider, label: label.trim() || definition.name, apiKey: apiKey.trim(), model: model.trim(), voiceId: voiceId.trim() || undefined, endpoint: endpoint.trim() || undefined };
@@ -53,7 +54,7 @@ export function ConnectionVault() {
     try {
       if (provider === "compatible") {
         if (!/^https:\/\//i.test(endpoint)) throw new Error("Enter an HTTPS OpenAI-compatible endpoint.");
-        const response = await fetch(endpoint, { method: "POST", headers: { "content-type": "application/json", Authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, messages: [{ role: "user", content: "Reply with OK." }], max_tokens: 3 }) });
+        const response = await fetch(chatCompletionsUrl(endpoint), { method: "POST", headers: { "content-type": "application/json", ...(apiKey.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : {}) }, body: JSON.stringify({ model, messages: [{ role: "user", content: "Reply with OK." }], max_tokens: 3 }) });
         if (!response.ok) throw new Error(`The endpoint returned HTTP ${response.status}. Check CORS, model and authorization settings.`);
         setStatus("Compatible endpoint responded successfully.");
       } else {
@@ -87,8 +88,8 @@ export function ConnectionVault() {
     <section className="connection-form workspace-panel">
       <span className="panel-label">NEW CONNECTION</span><h2>Connect a provider</h2><p>Keys are placed in session storage only when you save. They are cleared when the browser session ends.</p>
       <div className="provider-selector">{providerOrder.map((id) => <button key={id} className={provider === id ? "active" : ""} onClick={() => selectProvider(id)}><i>{providerDefinitions[id].name.slice(0, 1)}</i><span>{providerDefinitions[id].name}</span></button>)}</div>
-      <div className="form-grid"><label>Connection name<input value={label} onChange={(event) => setLabel(event.target.value)} /></label><label>Model identifier<input value={model} onChange={(event) => setModel(event.target.value)} /></label><label className="full-field">{definition.keyLabel}<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" spellCheck="false" placeholder="Key is never committed or included in page analytics" /></label>{provider === "elevenlabs" && <label className="full-field">Voice ID<input value={voiceId} onChange={(event) => setVoiceId(event.target.value)} placeholder="ElevenLabs voice identifier" /></label>}{provider === "compatible" && <label className="full-field">Chat completions endpoint<input type="url" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder="https://provider.example/v1/chat/completions" /></label>}</div>
-      <div className="form-actions"><button className="secondary-button" onClick={testConnection} disabled={testing || !apiKey}>{testing ? "Testing…" : provider === "compatible" ? "Send small test request" : "Verify provider key"}</button><button className="primary-action" onClick={saveSession}>Save for this session <span>→</span></button></div>
+      <div className="form-grid"><label>Connection name<input value={label} onChange={(event) => setLabel(event.target.value)} /></label><label>Model identifier<input value={model} onChange={(event) => setModel(event.target.value)} /></label><label className="full-field">{definition.keyLabel}<input type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="off" spellCheck="false" placeholder="Key is never committed or included in page analytics" /></label>{provider === "elevenlabs" && <label className="full-field">Voice ID<input value={voiceId} onChange={(event) => setVoiceId(event.target.value)} placeholder="ElevenLabs voice identifier" /></label>}{provider === "compatible" && <label className="full-field">Chat completions endpoint<input type="url" value={endpoint} onChange={(event) => setEndpoint(event.target.value)} placeholder="https://provider.example/v1 or …/v1/chat/completions" /><small className="field-hint">A base URL ending in /v1 is completed to /chat/completions for text requests; file workflows post to the exact URL. Leave the key empty for endpoints that need none.</small></label>}</div>
+      <div className="form-actions"><button className="secondary-button" onClick={testConnection} disabled={testing || (!apiKey && provider !== "compatible")}>{testing ? "Testing…" : provider === "compatible" ? "Send small test request" : "Verify provider key"}</button><button className="primary-action" onClick={saveSession}>Save for this session <span>→</span></button></div>
       <div className="connection-notice"><span>◇</span><p>{definition.description} {provider === "compatible" && "The endpoint must allow cross-origin browser requests; Trenith does not proxy arbitrary URLs."}</p></div>
     </section>
 

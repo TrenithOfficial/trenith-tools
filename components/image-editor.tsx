@@ -194,7 +194,7 @@ export function ImageEditor({ slug }: { slug: string }) {
               <small>Decoding on your device. HEIC and TIFF load a small decoder the first time.</small>
             </div>
           ) : (
-          <label className="editor-dropzone">
+          <label className="editor-dropzone" onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const dropped = event.dataTransfer.files?.[0]; if (dropped) void loadFile(dropped); }}>
             <input type="file" accept="image/*,.jpg,.jpeg,.png,.webp,.gif,.bmp,.avif,.heic,.heif,.tif,.tiff" onChange={(e) => e.target.files?.[0] && loadFile(e.target.files[0])} />
             <span className="editor-drop-icon" aria-hidden>⤓</span>
             <strong>Choose an image or drag one here</strong>

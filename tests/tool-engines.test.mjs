@@ -96,3 +96,13 @@ test("the packaged FFmpeg engine ships a chunk manifest that matches the chunks 
   assert.equal(bytes, manifest.bytes, "chunks reassemble to the full engine");
   assert.equal(manifest.chunkBytes, 16000000);
 });
+
+test("compatible endpoints: base URLs are completed, full URLs are kept", async () => {
+  const { chatCompletionsUrl } = await import("../lib/byok.ts");
+  assert.equal(chatCompletionsUrl("https://api.groq.com/openai/v1"), "https://api.groq.com/openai/v1/chat/completions");
+  assert.equal(chatCompletionsUrl("https://api.example.com/v1/"), "https://api.example.com/v1/chat/completions");
+  assert.equal(chatCompletionsUrl("https://api.example.com"), "https://api.example.com/v1/chat/completions");
+  assert.equal(chatCompletionsUrl("https://api.example.com/v1/chat/completions"), "https://api.example.com/v1/chat/completions");
+  assert.equal(chatCompletionsUrl("https://api.example.com/custom/generate"), "https://api.example.com/custom/generate");
+  assert.equal(chatCompletionsUrl("not a url"), "not a url");
+});

@@ -45,8 +45,8 @@ export const metadata: Metadata = {
   publisher: COMPANY_NAME,
   keywords: ["free online tools", "watch together online", "watch party free", "OTT watch party India", "Netflix party alternative", "watch together with video call", "free tools no sign up", "audio converter online free", "metadata remover online", "merge pdf free", "audio joiner", "video joiner", "PDF tools", "image compressor online", "SEO tools free", "audio downloader", "BYOK AI", "browser file tools", "private file tools no upload", "Trenith"],
   alternates: { ...alternateUrls("/"), types: { "application/rss+xml": siteUrl("/feed.xml") } },
-  openGraph: { type: "website", locale: siteLanguage === "en-IN" ? "en_IN" : "en_US", url: siteUrl("/"), siteName: "Trenith Tools", title: "Trenith Tools — Free Private File & BYOK AI Tools", description: baseDescription, images: [{ url: "/trenith-og.jpg", width: 630, height: 630, alt: "Trenith Tools" }] },
-  twitter: { card: "summary_large_image", title: "Trenith Tools", description: baseDescription, images: ["/trenith-og.jpg"] },
+  openGraph: { type: "website", locale: siteLanguage === "en-IN" ? "en_IN" : "en_US", url: siteUrl("/"), siteName: "Trenith Tools", title: "Trenith Tools — Free Private File & BYOK AI Tools", description: baseDescription, images: [{ url: "/og/default.jpg", width: 1200, height: 630, alt: "Trenith Tools — free private file tools, BYOK AI and Watch Together rooms" }] },
+  twitter: { card: "summary_large_image", title: "Trenith Tools", description: baseDescription, images: ["/og/default.jpg"] },
   robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1, "max-video-preview": -1 } },
   category: "technology",
   other: {
@@ -71,7 +71,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang={siteLanguage}>
+    <html lang={siteLanguage} suppressHydrationWarning>
+      <head>
+        {/* Apply the saved accent palette before first paint so pages never
+            flash the default theme; the shell reads the same key on mount. */}
+        <script dangerouslySetInnerHTML={{ __html: `try{var t=localStorage.getItem("trenith-color-theme");if(t&&/^[a-z]+$/.test(t))document.documentElement.dataset.theme=t}catch(e){}` }} />
+      </head>
       <body><JsonLd data={organizationStructuredData} /><SiteShell>{children}</SiteShell><ConsentManager /></body>
     </html>
   );
