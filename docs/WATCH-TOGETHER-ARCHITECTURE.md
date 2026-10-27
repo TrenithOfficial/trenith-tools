@@ -1,6 +1,6 @@
 # Trenith Watch Together — complete architecture and release plan
 
-Status: implemented beta architecture · 18 July 2026  
+Status: implemented beta architecture · protocol 2 · 27 October 2026  
 Owner: Trenith Technologies Private Limited  
 Scope: synchronized authorized OTT web playback, encrypted chat/reactions, live microphone and camera
 
@@ -38,13 +38,15 @@ The Sites deployment handles `/api/watch/*` before the Vinext application and bi
 
 ## Protocol
 
-Protocol version: `1`.
+Protocol version: `2` (additive over 1: new `sync-status`, `room-locked` and `kick` kinds, `paused` on playback messages, server-clock `sentAt`).
 
 | Message | Purpose | Server-readable content |
 | --- | --- | --- |
 | `chat` | Temporary room message | Sender, target and timestamps; message body encrypted |
 | `reaction` | Emoji reaction | Sender and timestamps; emoji encrypted |
-| `playback` | Play, pause, seek, snapshot and rate | Sender and timestamps; player state encrypted |
+| `playback` | Play, pause, seek, snapshot and rate; `sentAt` in server time, `paused` carries the controller's state | Sender and timestamps; player state encrypted |
+| `sync-status` | Each connected participant's position every 6 s for the drift roster | Sender and timestamps; position encrypted |
+| `room-locked`, `kick` | Host-only room moderation mirrors of the REST calls | Sender and timestamps; body encrypted |
 | `content-change` | Detect different titles/tabs | Sender and timestamps; title/key/deep link encrypted |
 | `peer-offer`, `peer-answer`, `peer-ice` | WebRTC negotiation | Sender/target/timestamps; SDP/ICE encrypted |
 | `media-state` | Participant microphone/camera UI | Sender/timestamps; state encrypted |
@@ -62,7 +64,10 @@ Payloads are capped at 64 KiB. The client polls after the last monotonic sequenc
 | `/api/watch/rooms/:id/events` | GET | bearer participant token | Events after sequence and active roster |
 | `/api/watch/rooms/:id/events` | POST | bearer participant token | Adds one opaque encrypted event |
 | `/api/watch/rooms/:id/ice` | GET | bearer participant token | STUN and optional short-lived TURN configuration |
-| `/api/watch/rooms/:id/leave` | POST | bearer participant token | Deactivates participant |
+| `/api/watch/rooms/:id/leave` | POST | bearer participant token | Deactivates participant; a leaving host hands over to the longest-present guest |
+| `/api/watch/rooms/:id/transfer` | POST | host bearer token | Makes `participantId` the host |
+| `/api/watch/rooms/:id/remove` | POST | host bearer token | Deactivates a guest's session |
+| `/api/watch/rooms/:id/lock` | POST | host bearer token | Blocks or allows new joins (HTTP 423 while locked) |
 | `/api/watch/rooms/:id` | DELETE | host bearer token | Ends room and deactivates roster |
 
 Bearer tokens and invitation proofs are hashed with SHA-256 before D1 storage. Active presence uses a 45-second visible window; participants inactive for 90 seconds are deactivated. Expired rows are cleaned during room requests. Production should also run a scheduled cleanup when the room volume makes request-time cleanup inefficient.
@@ -92,14 +97,22 @@ The adapter searches document and open shadow roots for visible `video`/`audio` 
 
 ## Playback synchronization
 
-- Play and pause are event-driven.
-- Seek is applied only when drift exceeds 750 ms.
-- Playback rate is bounded to 0.25–4.0.
-- A remote-application guard suppresses echo events for 1.4 seconds.
-- Advertisement detection pauses sync instead of forcing a seek through ads.
-- A content key based on the canonical URL/origin path detects different titles before commands are applied.
+- Every poll response carries `serverTime`; the client keeps an NTP-style, exponentially smoothed clock offset and stamps outgoing `sentAt` values in server time.
+- A received playback message is projected forward by its age (`currentTime + age × rate` while playing) before it is applied, so polling and network latency are compensated instead of accumulated as drift.
+- Play and pause are event-driven; `snapshot` messages carry the controller's `paused` state so a stalled or locally paused guest is pulled back in line.
+- While playing, the controller re-broadcasts a snapshot every 5 s (the host heartbeat). Guests apply it only when their projected drift exceeds 750 ms.
+- Each connected participant sends `sync-status` every 6 s; the roster shows everyone's projected position and whether they are in sync, ahead, behind or paused relative to the host, and the host can resync everyone with one click.
+- Polling adapts: ~450 ms while the local player is running, ~900 ms idle, ~2.5 s when paused in a background tab, with bounded backoff on failures.
+- Playback rate is bounded to 0.25–4.0; a remote-application guard suppresses echo events for 1.4 seconds; advertisement detection pauses sync instead of forcing a seek through ads.
+- Content keys are provider-aware (`youtube:<id>` keeps the video id; path-based providers keep the path; tracking parameters are ignored) and are compared before any command is applied.
+- Netflix is driven through the page's own player API by an adapter injected into the page world after the user grants site access; the HTML5 element path remains the fallback and the only path for every other provider.
 - Browser autoplay errors are surfaced and instruct the participant to click play once in the OTT tab.
-- A three-second status snapshot repairs missed events and tab/player changes.
+
+## Host continuity and moderation
+
+- Roles come from the roster on every poll, not from the remembered session, so a hand-over takes effect in open tabs.
+- A host who leaves hands over immediately; a host silent past the 45-second presence window is replaced by the longest-present active guest on the next poll.
+- Hosts can transfer, remove a guest (the guest's token stops working) and lock the room (new joins receive HTTP 423). Chat shows joins, departures, handovers and lock changes as system lines.
 
 Provider websites change without notice. Automated builds prove the adapter is packaged and policy-compliant; release qualification must also execute the manual provider matrix against test accounts that Trenith is authorized to use.
 

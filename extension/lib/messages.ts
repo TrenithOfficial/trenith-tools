@@ -16,6 +16,8 @@ export type PlaybackPayload = {
   contentKey: string;
   title?: string;
   provider?: string;
+  // Desired paused state. A snapshot carries the controller's state so a guest
+  // whose player stalled (or who pressed pause locally) is pulled back in line.
   paused?: boolean;
 };
 
@@ -24,7 +26,38 @@ export type PlayerStatus = PlaybackPayload & {
   tabId?: number;
   adPlaying?: boolean;
   error?: string;
+  // "page" when a provider-specific adapter running in the page world drives
+  // the player (Netflix); "html5" for the generic media-element path.
+  adapter?: "html5" | "page";
 };
+
+// Canonical identity for the title being watched — mirrors
+// normalizeContentKey in packages/watch-core so the room and the companion
+// always agree. Query-string sites keep the video id; path sites keep the path;
+// tracking parameters never count.
+export function contentKeyForUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      const id = parsed.searchParams.get("v") || (parsed.pathname.startsWith("/shorts/") ? parsed.pathname.split("/")[2] : parsed.pathname.startsWith("/embed/") ? parsed.pathname.split("/")[2] : "");
+      return id ? `youtube:${id}` : `youtube:${parsed.pathname}`;
+    }
+    if (host === "youtu.be") return `youtube:${parsed.pathname.replace(/^\//, "")}`;
+    return `${host}${parsed.pathname.replace(/\/+$/, "").slice(0, 300)}`;
+  } catch {
+    return url.slice(0, 300);
+  }
+}
+
+// Providers whose player is driven through an adapter injected into the page
+// world (their HTML5 element rejects direct seeks or fights them).
+export const pageAdapterHosts = ["netflix.com"];
+
+export function needsPageAdapter(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return pageAdapterHosts.some((entry) => host === entry || host.endsWith(`.${entry}`));
+}
 
 export type ConnectionStatus = {
   installed: true;

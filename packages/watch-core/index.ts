@@ -1,9 +1,18 @@
-export const WATCH_PROTOCOL_VERSION = 1;
+export const WATCH_PROTOCOL_VERSION = 2;
 export const WATCH_ROOM_TTL_MS = 6 * 60 * 60 * 1000;
 export const WATCH_EVENT_TTL_MS = 10 * 60 * 1000;
 export const WATCH_SYNC_PARTICIPANT_LIMIT = 25;
 export const WATCH_MEDIA_PARTICIPANT_LIMIT = 6;
 export const WATCH_MAX_EVENT_BYTES = 64 * 1024;
+// The host re-broadcasts its player position this often while playing so late
+// joiners and buffering guests converge without anyone touching the controls.
+export const WATCH_HEARTBEAT_MS = 5000;
+// Every connected participant reports its own position this often; the roster
+// shows who is ahead or behind and the host can resync everyone in one click.
+export const WATCH_STATUS_MS = 6000;
+// Remote positions closer than this are left alone; seeking for tiny drifts
+// causes visible stutter without improving the shared experience.
+export const WATCH_DRIFT_TOLERANCE_MS = 750;
 
 export type WatchControlMode = "host" | "everyone";
 export type WatchRole = "host" | "guest";
@@ -79,6 +88,8 @@ export type WatchEncryptedEvent = {
   createdAt: number;
 };
 
+export type WatchPlaybackAction = "play" | "pause" | "seek" | "snapshot";
+
 export type WatchRoomMessage =
   | { type: "presence"; participant: WatchParticipant }
   | { type: "peer-offer"; targetId: string; description: RTCSessionDescriptionInit }
@@ -86,11 +97,18 @@ export type WatchRoomMessage =
   | { type: "peer-ice"; targetId: string; candidate: RTCIceCandidateInit }
   | { type: "chat"; id: string; text: string; sentAt: number }
   | { type: "reaction"; emoji: string; sentAt: number }
-  | { type: "playback"; action: "play" | "pause" | "seek" | "snapshot"; currentTime: number; playbackRate: number; sentAt: number; contentKey: string }
+  // `sentAt` is expressed in server time (the sender adds its measured clock
+  // offset) so receivers can project where the sender's player is *now*.
+  | { type: "playback"; action: WatchPlaybackAction; currentTime: number; playbackRate: number; paused?: boolean; sentAt: number; contentKey: string }
+  | { type: "sync-status"; currentTime: number; paused: boolean; playbackRate: number; contentKey: string; connected: boolean; sentAt: number }
   | { type: "content-change"; contentKey: string; deepLink: string; title: string; sentAt: number }
   | { type: "media-state"; microphone: boolean; camera: boolean }
   | { type: "host-transfer"; participantId: string }
+  | { type: "room-locked"; locked: boolean }
+  | { type: "kick"; participantId: string }
   | { type: "room-ended"; sentAt: number };
+
+export const WATCH_EVENT_KINDS: ReadonlySet<string> = new Set(["presence", "peer-offer", "peer-answer", "peer-ice", "chat", "reaction", "playback", "sync-status", "content-change", "media-state", "host-transfer", "room-locked", "kick", "room-ended"]);
 
 export function normalizeDisplayName(value: unknown): string {
   const cleaned = String(value ?? "Guest")
@@ -124,4 +142,62 @@ export function isWatchProviderId(value: string): value is WatchProviderId {
 
 export function utf8ByteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+// --- Clock alignment and position projection (pure, unit-tested) -------------------
+
+// NTP-style offset estimate: the server timestamp is assumed to sit midway
+// through the request. Positive means the server clock is ahead of ours.
+export function estimateClockOffset(sentLocalMs: number, serverTimeMs: number, receivedLocalMs: number): number {
+  return serverTimeMs - (sentLocalMs + receivedLocalMs) / 2;
+}
+
+// Exponentially smoothed offset so one slow poll does not jerk every seek.
+export function smoothClockOffset(previous: number | null, sample: number): number {
+  if (previous === null || !Number.isFinite(previous)) return sample;
+  return previous + (sample - previous) * 0.3;
+}
+
+export type PlaybackSnapshot = { currentTime: number; playbackRate: number; paused: boolean; sentAt: number };
+
+// Where the sender's player should be now, given the message age. Paused
+// players do not advance; rates are bounded to the extension's accepted range.
+export function projectPlaybackPosition(snapshot: PlaybackSnapshot, nowServerMs: number): number {
+  if (snapshot.paused) return Math.max(0, snapshot.currentTime);
+  const rate = Number.isFinite(snapshot.playbackRate) && snapshot.playbackRate >= 0.25 && snapshot.playbackRate <= 4 ? snapshot.playbackRate : 1;
+  const ageSeconds = Math.max(0, Math.min(120, (nowServerMs - snapshot.sentAt) / 1000));
+  return Math.max(0, snapshot.currentTime + ageSeconds * rate);
+}
+
+export type DriftVerdict = { seconds: number; label: "in sync" | "ahead" | "behind" | "paused" | "unknown" };
+
+// Compare a participant's reported position against a reference (usually the
+// host), both projected to the same instant.
+export function describeDrift(participant: PlaybackSnapshot | null, reference: PlaybackSnapshot | null, nowServerMs: number): DriftVerdict {
+  if (!participant || !reference) return { seconds: 0, label: "unknown" };
+  const mine = projectPlaybackPosition(participant, nowServerMs);
+  const theirs = projectPlaybackPosition(reference, nowServerMs);
+  const seconds = mine - theirs;
+  if (participant.paused !== reference.paused) return { seconds, label: "paused" };
+  if (Math.abs(seconds) * 1000 <= WATCH_DRIFT_TOLERANCE_MS) return { seconds, label: "in sync" };
+  return { seconds, label: seconds > 0 ? "ahead" : "behind" };
+}
+
+// Canonical identity for the title being watched. Query-string sites keep the
+// video id, path-based sites keep the path, and tracking parameters never
+// count, so two people on the same title always agree.
+export function normalizeContentKey(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+    if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+      const id = parsed.searchParams.get("v") || (parsed.pathname.startsWith("/shorts/") ? parsed.pathname.split("/")[2] : parsed.pathname.startsWith("/embed/") ? parsed.pathname.split("/")[2] : "");
+      return id ? `youtube:${id}` : `youtube:${parsed.pathname}`;
+    }
+    if (host === "youtu.be") return `youtube:${parsed.pathname.replace(/^\//, "")}`;
+    const path = parsed.pathname.replace(/\/+$/, "").slice(0, 300);
+    return `${host}${path}`;
+  } catch {
+    return url.slice(0, 300);
+  }
 }

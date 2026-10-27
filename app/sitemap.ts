@@ -4,7 +4,7 @@ import { guides } from "../lib/guides";
 import { GLOBAL_SITE_URL, INDIA_SITE_URL, siteUrl } from "../lib/site";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const modified = new Date("2026-07-18T00:00:00.000Z");
+  const modified = new Date("2026-10-27T00:00:00.000Z");
   const routes = ["/", "/tools", "/watch-together", "/watch-together/supported", "/guides", "/status", "/changelog", "/connections", "/studio", "/about", "/privacy", "/terms", "/cookies", "/privacy-choices", "/security", "/sub-processors", "/open-source", "/copyright", "/accessibility"];
   const makeEntry = (path: string, priority: number, changeFrequency: "weekly" | "monthly") => ({
     url: siteUrl(path), lastModified: modified, changeFrequency, priority,

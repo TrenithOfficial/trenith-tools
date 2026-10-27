@@ -1,4 +1,5 @@
 import {
+  WATCH_EVENT_KINDS,
   WATCH_EVENT_TTL_MS,
   WATCH_MAX_EVENT_BYTES,
   WATCH_PROTOCOL_VERSION,
@@ -66,7 +67,8 @@ const schemaStatements = [
     control_mode TEXT DEFAULT 'host' NOT NULL,
     created_at INTEGER NOT NULL,
     expires_at INTEGER NOT NULL,
-    ended_at INTEGER
+    ended_at INTEGER,
+    locked INTEGER DEFAULT 0 NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS watch_participants (
     id TEXT PRIMARY KEY NOT NULL,
@@ -146,8 +148,19 @@ function json(request: Request, body: unknown, status = 200, extra: HeadersInit 
   });
 }
 
+// Columns added after the first deployment. Each ALTER is attempted on its own
+// and a "duplicate column" failure is the expected steady state.
+const schemaMigrations = ["ALTER TABLE watch_rooms ADD COLUMN locked INTEGER DEFAULT 0 NOT NULL"];
+
 async function ensureSchema(db: WatchD1): Promise<void> {
-  schemaReady ??= db.batch(schemaStatements.map((statement) => db.prepare(statement))).then(() => undefined).catch((error) => {
+  schemaReady ??= (async () => {
+    await db.batch(schemaStatements.map((statement) => db.prepare(statement)));
+    for (const migration of schemaMigrations) {
+      try { await db.prepare(migration).run(); } catch (error) {
+        if (!/duplicate column|already exists/i.test(error instanceof Error ? error.message : String(error))) throw error;
+      }
+    }
+  })().catch((error) => {
     schemaReady = null;
     throw error;
   });
@@ -191,7 +204,7 @@ async function authenticate(request: Request, db: WatchD1, roomId: string): Prom
 
 async function activeParticipants(db: WatchD1, roomId: string, now: number) {
   const result = await db.prepare(`SELECT id, display_name, role, last_seen_at
-    FROM watch_participants WHERE room_id = ? AND active = 1 AND last_seen_at >= ? ORDER BY joined_at ASC`)
+    FROM watch_participants WHERE room_id = ? AND active = 1 AND last_seen_at >= ? ORDER BY CASE role WHEN 'host' THEN 0 ELSE 1 END, joined_at ASC`)
     .bind(roomId, now - 45_000).all<{ id: string; display_name: string; role: "host" | "guest"; last_seen_at: number }>();
   return (result.results || []).map((participant) => ({
     id: participant.id,
@@ -246,6 +259,29 @@ async function rateLimit(request: Request, env: WatchApiEnv, scope: string, limi
   return json(request, { error: "Too many Watch Together requests. Please wait and try again." }, 429, { "retry-after": String(retryAfter) });
 }
 
+// Make `participantId` the host: the previous host (if any) becomes a guest and
+// the room record follows. Used by explicit transfers and by auto-promotion.
+async function promoteToHost(db: WatchD1, roomId: string, participantId: string): Promise<void> {
+  await db.batch([
+    db.prepare("UPDATE watch_participants SET role = 'guest' WHERE room_id = ? AND role = 'host' AND id != ?").bind(roomId, participantId),
+    db.prepare("UPDATE watch_participants SET role = 'host' WHERE room_id = ? AND id = ?").bind(roomId, participantId),
+    db.prepare("UPDATE watch_rooms SET host_participant_id = ? WHERE id = ?").bind(participantId, roomId),
+  ]);
+}
+
+// A room whose host closed the tab must not be stuck with nobody able to press
+// play. When the host has been silent past the presence window, the guest who
+// has been in the room longest takes over. Returns the new host id when a
+// handover happened.
+async function ensureHost(db: WatchD1, roomId: string, now: number): Promise<string | null> {
+  const host = await db.prepare("SELECT id, active, last_seen_at FROM watch_participants WHERE room_id = ? AND role = 'host' LIMIT 1").bind(roomId).first<{ id: string; active: number; last_seen_at: number }>();
+  if (host && host.active === 1 && host.last_seen_at >= now - 45_000) return null;
+  const candidate = await db.prepare("SELECT id FROM watch_participants WHERE room_id = ? AND active = 1 AND last_seen_at >= ? AND role = 'guest' ORDER BY joined_at ASC LIMIT 1").bind(roomId, now - 45_000).first<{ id: string }>();
+  if (!candidate) return null;
+  await promoteToHost(db, roomId, candidate.id);
+  return candidate.id;
+}
+
 async function createRoom(request: Request, db: WatchD1): Promise<Response> {
   const body = await readBody(request);
   const provider = String(body.provider || "generic");
@@ -287,12 +323,13 @@ async function joinRoom(request: Request, db: WatchD1, roomId: string): Promise<
   const body = await readBody(request);
   const proof = String(body.inviteProof || "");
   const now = Date.now();
-  const room = await db.prepare(`SELECT id, invite_proof_hash, provider, control_mode, expires_at, ended_at
+  const room = await db.prepare(`SELECT id, invite_proof_hash, provider, control_mode, expires_at, ended_at, locked
     FROM watch_rooms WHERE id = ? LIMIT 1`).bind(roomId).first<{
-      id: string; invite_proof_hash: string; provider: string; control_mode: WatchControlMode; expires_at: number; ended_at: number | null;
+      id: string; invite_proof_hash: string; provider: string; control_mode: WatchControlMode; expires_at: number; ended_at: number | null; locked: number;
     }>();
   if (!room || room.ended_at || room.expires_at <= now) return json(request, { error: "This room has ended or expired." }, 410);
   if (await sha256(proof) !== room.invite_proof_hash) return json(request, { error: "This invitation link is incomplete or invalid." }, 403);
+  if (room.locked) return json(request, { error: "The host has locked this room, so no one else can join right now." }, 423);
 
   const participants = await activeParticipants(db, roomId, now);
   if (participants.length >= WATCH_SYNC_PARTICIPANT_LIMIT) return json(request, { error: "This room is full." }, 409);
@@ -327,9 +364,8 @@ async function postEvent(request: Request, db: WatchD1, roomId: string): Promise
   if (!payload || utf8ByteLength(payload) > WATCH_MAX_EVENT_BYTES) return json(request, { error: "The encrypted event is empty or too large." }, 413);
   if (targetId && !isWatchParticipantId(targetId)) return json(request, { error: "The target participant is invalid." }, 400);
   const kind = payload.slice(0, payload.indexOf(":"));
-  const allowedKinds = new Set(["presence", "peer-offer", "peer-answer", "peer-ice", "chat", "reaction", "playback", "content-change", "media-state", "host-transfer", "room-ended"]);
-  if (!allowedKinds.has(kind)) return json(request, { error: "The encrypted event type is invalid." }, 400);
-  if (["host-transfer", "room-ended"].includes(kind) && participant.role !== "host") return json(request, { error: "Only the host can send this room event." }, 403);
+  if (!WATCH_EVENT_KINDS.has(kind)) return json(request, { error: "The encrypted event type is invalid." }, 400);
+  if (["host-transfer", "room-ended", "room-locked", "kick"].includes(kind) && participant.role !== "host") return json(request, { error: "Only the host can send this room event." }, 403);
   if (["playback", "content-change"].includes(kind) && participant.role !== "host") {
     const room = await db.prepare("SELECT control_mode FROM watch_rooms WHERE id = ? LIMIT 1").bind(roomId).first<{ control_mode: WatchControlMode }>();
     if (room?.control_mode !== "everyone") return json(request, { error: "Only the host can control playback in this room." }, 403);
@@ -349,24 +385,64 @@ async function getEvents(request: Request, db: WatchD1, roomId: string): Promise
   const after = Math.max(0, Number.parseInt(url.searchParams.get("after") || "0", 10) || 0);
   const now = Date.now();
   if (now - participant.last_seen_at > 10_000) await db.prepare("UPDATE watch_participants SET last_seen_at = ? WHERE id = ?").bind(now, participant.id).run();
+  await ensureHost(db, roomId, now);
   const rows = await db.prepare(`SELECT seq, sender_id, target_id, payload, created_at
     FROM watch_events
     WHERE room_id = ? AND seq > ? AND (target_id IS NULL OR target_id = ?)
     ORDER BY seq ASC LIMIT 200`).bind(roomId, after, participant.id).all<{
       seq: number; sender_id: string; target_id: string | null; payload: string; created_at: number;
     }>();
+  const room = await db.prepare("SELECT host_participant_id, locked, control_mode FROM watch_rooms WHERE id = ? LIMIT 1").bind(roomId).first<{ host_participant_id: string; locked: number; control_mode: WatchControlMode }>();
   return json(request, {
     events: (rows.results || []).map((event) => ({ seq: event.seq, senderId: event.sender_id, targetId: event.target_id, payload: event.payload, createdAt: event.created_at })),
     participants: await activeParticipants(db, roomId, now),
     serverTime: now,
+    hostId: room?.host_participant_id || null,
+    locked: Boolean(room?.locked),
+    controlMode: room?.control_mode || "host",
   });
 }
 
 async function leaveRoom(request: Request, db: WatchD1, roomId: string): Promise<Response> {
   const participant = await authenticate(request, db, roomId);
   if (!participant) return json(request, { error: "Room authorization failed." }, 401);
-  await db.prepare("UPDATE watch_participants SET active = 0, last_seen_at = ? WHERE id = ?").bind(Date.now(), participant.id).run();
-  return json(request, { left: true });
+  const now = Date.now();
+  await db.prepare("UPDATE watch_participants SET active = 0, last_seen_at = ? WHERE id = ?").bind(now, participant.id).run();
+  const newHost = participant.role === "host" ? await ensureHost(db, roomId, now) : null;
+  return json(request, { left: true, newHostId: newHost });
+}
+
+// Host controls. Each one is authorized by the bearer token's role, not by the
+// session the client remembers, so a demoted host cannot keep issuing them.
+async function transferHost(request: Request, db: WatchD1, roomId: string): Promise<Response> {
+  const participant = await authenticate(request, db, roomId);
+  if (!participant || participant.role !== "host") return json(request, { error: "Only the host can hand over the room." }, 403);
+  const body = await readBody(request);
+  const targetId = String(body.participantId || "");
+  if (!isWatchParticipantId(targetId) || targetId === participant.id) return json(request, { error: "Choose another participant to make host." }, 400);
+  const target = await db.prepare("SELECT id FROM watch_participants WHERE room_id = ? AND id = ? AND active = 1 LIMIT 1").bind(roomId, targetId).first<{ id: string }>();
+  if (!target) return json(request, { error: "That participant is no longer in the room." }, 404);
+  await promoteToHost(db, roomId, targetId);
+  return json(request, { hostId: targetId });
+}
+
+async function removeParticipant(request: Request, db: WatchD1, roomId: string): Promise<Response> {
+  const participant = await authenticate(request, db, roomId);
+  if (!participant || participant.role !== "host") return json(request, { error: "Only the host can remove someone." }, 403);
+  const body = await readBody(request);
+  const targetId = String(body.participantId || "");
+  if (!isWatchParticipantId(targetId) || targetId === participant.id) return json(request, { error: "Choose another participant to remove." }, 400);
+  const result = await db.prepare("UPDATE watch_participants SET active = 0, last_seen_at = ? WHERE room_id = ? AND id = ? AND role = 'guest'").bind(Date.now(), roomId, targetId).run();
+  return json(request, { removed: result.success });
+}
+
+async function setRoomLock(request: Request, db: WatchD1, roomId: string): Promise<Response> {
+  const participant = await authenticate(request, db, roomId);
+  if (!participant || participant.role !== "host") return json(request, { error: "Only the host can lock the room." }, 403);
+  const body = await readBody(request);
+  const locked = body.locked === true ? 1 : 0;
+  await db.prepare("UPDATE watch_rooms SET locked = ? WHERE id = ?").bind(locked, roomId).run();
+  return json(request, { locked: Boolean(locked) });
 }
 
 async function endRoom(request: Request, db: WatchD1, roomId: string): Promise<Response> {
@@ -711,7 +787,7 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv, ctx?: W
     // platform error page) instead of a clean JSON error.
     if (path === "rooms" && request.method === "POST") return await rateLimit(request, env, "create", 20, 60 * 60 * 1000) || await requireCreateAccess(request, env.DB) || await createRoom(request, env.DB);
 
-    const match = path.match(/^rooms\/([^/]+)(?:\/(events|leave|ice))?$/);
+    const match = path.match(/^rooms\/([^/]+)(?:\/(events|leave|ice|transfer|remove|lock))?$/);
     if (!match || !isWatchRoomId(match[1])) return json(request, { error: "Watch Together route not found." }, 404);
     const [, roomId, action] = match;
     if (!action && request.method === "POST") return await rateLimit(request, env, `join:${roomId}`, 60, 10 * 60 * 1000) || await joinRoom(request, env.DB, roomId);
@@ -719,6 +795,9 @@ export async function handleWatchApi(request: Request, env: WatchApiEnv, ctx?: W
     if (action === "events" && request.method === "POST") return await rateLimit(request, env, `event-write:${roomId}:${bearerToken(request)}`, 180, 60 * 1000) || await postEvent(request, env.DB, roomId);
     if (action === "events" && request.method === "GET") return await getEvents(request, env.DB, roomId);
     if (action === "leave" && request.method === "POST") return await leaveRoom(request, env.DB, roomId);
+    if (action === "transfer" && request.method === "POST") return await transferHost(request, env.DB, roomId);
+    if (action === "remove" && request.method === "POST") return await removeParticipant(request, env.DB, roomId);
+    if (action === "lock" && request.method === "POST") return await setRoomLock(request, env.DB, roomId);
     if (action === "ice" && request.method === "GET") return await rateLimit(request, env, `ice:${roomId}`, 30, 10 * 60 * 1000) || await iceServers(request, env.DB, env, roomId);
     return json(request, { error: "Method not allowed." }, 405, { allow: "GET, POST, DELETE, OPTIONS" });
   } catch (error) {

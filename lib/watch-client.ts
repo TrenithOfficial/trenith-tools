@@ -2,10 +2,13 @@
 
 import type { WatchEncryptedEvent, WatchProviderId, WatchRoomSession } from "../packages/watch-core";
 
-type RoomEventResponse = {
+export type RoomEventResponse = {
   events: WatchEncryptedEvent[];
   participants: WatchRoomSession["participants"];
   serverTime: number;
+  hostId: string | null;
+  locked: boolean;
+  controlMode: "host" | "everyone";
 };
 
 type IceResponse = { iceServers: RTCIceServer[]; relay: boolean };
@@ -65,12 +68,24 @@ export function sendRoomEvent(roomId: string, token: string, payload: string, ta
 }
 
 export function leaveRoom(roomId: string, token: string) {
-  return watchRequest<{ left: boolean }>(`rooms/${roomId}/leave`, {
+  return watchRequest<{ left: boolean; newHostId: string | null }>(`rooms/${roomId}/leave`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}` },
     body: "{}",
     keepalive: true,
   });
+}
+
+export function transferHost(roomId: string, token: string, participantId: string) {
+  return watchRequest<{ hostId: string }>(`rooms/${roomId}/transfer`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ participantId }) });
+}
+
+export function removeParticipant(roomId: string, token: string, participantId: string) {
+  return watchRequest<{ removed: boolean }>(`rooms/${roomId}/remove`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ participantId }) });
+}
+
+export function setRoomLock(roomId: string, token: string, locked: boolean) {
+  return watchRequest<{ locked: boolean }>(`rooms/${roomId}/lock`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: JSON.stringify({ locked }) });
 }
 
 export function endRoom(roomId: string, token: string) {

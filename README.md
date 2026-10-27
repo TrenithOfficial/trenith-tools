@@ -5,16 +5,16 @@ A free, light-first platform for file privacy, media, PDFs, images, music utilit
 ## Working tools
 
 - Public audio discovery and authorized direct downloads
-- Metadata inspection, removal, verification and ZIP export with per-format cleaning engines: ExifTool for images and camera formats, a document rewriter for PDFs, direct property scrubbing for Word/Excel/PowerPoint, and lossless FFmpeg stream copies for MP3, FLAC, Ogg, Opus, WAV, AIFF and WebM audio
+- Metadata inspection, removal, verification and ZIP export with a per-format engine for every file family: ExifTool for images and RAW (colour profile and orientation preserved), a lossless FFmpeg stream copy for every audio/video container (track languages restored), a PDF rewriter that anonymizes annotation authors and physically removes orphaned objects from earlier saves, Office package scrubbing (core/app/custom properties, people lists, thumbnails, revision ids, comment and tracked-change authors, template and mail-merge links, Excel absolute save paths, threaded-comment identities), OpenDocument, EPUB, SVG, HTML and RTF rewriters, and recursive ZIP cleaning that also reaches the media embedded inside documents. Every result is re-verified and reported by risk category.
 - Audio folder/file joining with native decoding, FFmpeg compatibility fallback and direct-to-disk WAV/RF64 streaming for large jobs
-- True MP3, WAV, FLAC, Ogg Vorbis, Opus and M4A/AAC conversion with preview and explicit download
-- Audio trimming and 0–400% volume adjustment with lossless WAV output
-- Public audio discovery with individual or batch ZIP downloads
-- Video folder/file joining with browser-native WebM export
-- PDF merge, split-to-ZIP, page extraction, rotation, page numbers, watermarking and structural optimization
-- JPG/PNG to PDF
-- Image resize, compression and JPG/PNG/WebP conversion
-- Searchable privacy, audio, video, PDF, image, music, SEO, Developer and AI directory with 48 dedicated tool pages
+- Audio conversion to MP3, M4A/AAC, WAV, FLAC, ALAC, AIFF, Ogg Vorbis, Opus, WebM, WavPack, AC3 and WMA — single files or whole folders with one-ZIP download, sample-rate/channel/bit-depth options, tags and cover art carried over
+- Audio trimming without re-encoding (or to any format) and 0–400% volume adjustment with any output format
+- Video conversion to MP4, WebM, MKV and MOV with lossless remuxing whenever the source codecs already fit the container, otherwise H.264 or VP8 encoding with quality, resolution, frame-rate and rotation control; video compression by quality or target size; keyframe-exact lossless or frame-accurate trimming; audio extraction with bit-for-bit copies; palette-optimized GIFs
+- Video folder/file joining: lossless concatenation when clips match, browser re-recording otherwise
+- PDF merge, split-to-ZIP, page extraction, rotation, page numbers, watermarking, real image recompression (text layer untouched) with an orphan sweep, PDF-to-JPG/PNG/WebP rendering and text extraction through pdf.js
+- Images to PDF from JPG, PNG, WebP, HEIC, AVIF, TIFF, GIF, BMP and SVG
+- Image crop/resize/convert editor plus batch mode: opens HEIC, TIFF, SVG, AVIF; exports JPG, PNG, WebP, AVIF, GIF, BMP, ICO and TIFF
+- Searchable privacy, audio, video, PDF, image, music, SEO, Developer and AI directory with 56 dedicated tool pages
 - Free on-device SEO tools: SERP snippet preview with length checks and a keyword density, readability and question analyzer
 - AI Studio runs every workflow with any connected key — text models produce structured plans for media jobs, browser voices speak text with no key at all, and vision-capable keys read text from scans
 - Free BYOK Connections Vault and AI Studio for OpenAI, Anthropic, Gemini, ElevenLabs, OpenRouter and compatible endpoints
@@ -23,10 +23,13 @@ A free, light-first platform for file privacy, media, PDFs, images, music utilit
 - Global and India canonicals/hreflang, structured data, localized sitemaps, robots, web manifest, guides, capability status, changelog/RSS, a public tool catalog API, `llms.txt` and `llms-full.txt`
 - Global privacy, terms, cookie, privacy choices, security, subprocessors, copyright and accessibility disclosures
 - Watch Together rooms for authorized OTT websites with encrypted playback signals, chat, reactions and temporary membership
+- Protocol 2 sync: server clock alignment, latency-projected seeks, a host heartbeat while playing, per-participant drift display with one-click resync, host handover (manual, and automatic when the host disappears), lock and remove
 - Optional peer-to-peer camera and microphone for up to 6 people, and playback synchronization for up to 25
-- Cross-browser Manifest V3 companion for Chrome, Edge and Firefox with optional per-site access, no screen capture and no remote code
+- Cross-browser Manifest V3 companion 1.1.0 for Chrome, Edge and Firefox with optional per-site access, a Netflix page-API adapter, no screen capture and no remote code
 
 Core file tools process source files in the browser. There is no arbitrary application-level file-count limit; usable capacity depends on the device, browser memory and browser codec support.
+
+Video re-encoding runs on the single-threaded FFmpeg WebAssembly engine, so it is slower than real time for long high-resolution clips; lossless remuxes, audio extraction and metadata strips finish in seconds. `libvpx-vp9` traps in this build, so WebM output uses VP8.
 
 Advanced music generation, stem separation, OCR, Office conversion and similar cloud operations require a compatible provider endpoint that supports the named workflow. Users connect their own account in the session-first BYOK vault. Official providers use fixed allowlisted routes; custom HTTPS endpoints run directly from the browser and must support CORS.
 
@@ -126,6 +129,8 @@ Optional worker configuration (set with `wrangler secret put <NAME> -c wrangler.
 | `RESEND_API_KEY` | Optional: email the access key / confirmation to requesters |
 | `WATCH_ACCESS_EMAIL_FROM` | Verified Resend sender for access emails |
 | `WATCH_ACCESS_EMAIL_TO` | Address notified of each new pending request |
+
+Host controls (bearer token of the current host): `POST /api/watch/rooms/:id/transfer` `{participantId}`, `POST /api/watch/rooms/:id/remove` `{participantId}`, `POST /api/watch/rooms/:id/lock` `{locked}`. The roster poll returns `hostId`, `locked` and `controlMode`; a host silent for longer than the 45-second presence window is replaced by the longest-present guest automatically. The `locked` column is added to existing databases by a self-applied migration.
 
 Approve a pending request manually (mints and returns/emails a key):
 

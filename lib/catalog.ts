@@ -17,8 +17,8 @@ export type ToolDefinition = {
 export const tools: ToolDefinition[] = [
   {
     slug: "metadata-remover", name: "Metadata Remover", shortName: "Metadata Remover", category: "Privacy", kind: "device", icon: "⌫", accent: "cyan",
-    description: "Inspect, remove and verify private metadata across images, audio, video, documents, archives and other ExifTool-compatible files on your device.", formats: ["JPG", "PNG", "HEIC", "RAW", "TIFF", "MP4", "MOV", "MKV", "MP3", "FLAC", "OGG", "WAV", "PDF", "DOCX", "XLSX", "PPTX", "EPUB", "SVG", "and more"],
-    steps: ["Choose any files or an entire folder", "Inspect detected EXIF, GPS, author and application metadata", "Remove, re-scan and download verified cleaned copies"],
+    description: "Inspect, remove and verify GPS, author, device, timestamp and application metadata from images, RAW, audio, video, PDF, Office, OpenDocument, EPUB, SVG, HTML, RTF and ZIP files — including the media embedded inside documents — on your device.", formats: ["JPG", "PNG", "WebP", "HEIC", "AVIF", "TIFF", "RAW", "MP4", "MOV", "MKV", "AVI", "MP3", "FLAC", "WAV", "PDF", "DOCX", "XLSX", "PPTX", "ODT", "EPUB", "SVG", "HTML", "RTF", "ZIP", "and more"],
+    steps: ["Choose any files or an entire folder", "Review identifying fields grouped by location, identity, device, time and software", "Remove, re-verify and download cleaned copies or one ZIP"],
   },
   {
     slug: "audio-downloader", name: "Audio Downloader", shortName: "Audio Downloader", category: "Audio", kind: "web", icon: "↓", accent: "cyan",
@@ -32,23 +32,48 @@ export const tools: ToolDefinition[] = [
   },
   {
     slug: "audio-converter", name: "Audio Format Converter", shortName: "Audio Converter", category: "Audio", kind: "device", icon: "↻", accent: "amber",
-    description: "Convert audio between MP3, WAV, FLAC, Ogg Vorbis, Opus and M4A/AAC with a private in-browser media engine.", formats: ["MP3", "WAV", "FLAC", "OGG", "OPUS", "M4A", "AAC", "WebM", "AIFF"],
-    steps: ["Choose an audio file", "Select the output format and bitrate", "Convert, preview and download"],
+    description: "Convert one file or a whole folder between MP3, M4A/AAC, WAV, FLAC, ALAC, AIFF, Ogg Vorbis, Opus, WebM, WavPack, AC3 and WMA with bitrate, sample-rate, channel and bit-depth control, tags and cover art kept — all in a private in-browser media engine.", formats: ["MP3", "M4A", "AAC", "WAV", "FLAC", "ALAC", "AIFF", "OGG", "OPUS", "WebM", "WavPack", "AC3", "WMA"],
+    steps: ["Choose audio files or a folder (video files work too)", "Pick the format, bitrate and optional sample rate, channels or bit depth", "Convert the batch, preview each result and download one ZIP"],
   },
   {
     slug: "audio-trimmer", name: "Audio Trimmer & Cutter", shortName: "Audio Trimmer", category: "Audio", kind: "device", icon: "✂", accent: "rose",
-    description: "Cut an exact time range from an audio file and export a lossless WAV without uploading the recording.", formats: ["MP3", "WAV", "FLAC", "OGG", "OPUS", "M4A", "AAC", "WebM", "AIFF"],
-    steps: ["Choose an audio file", "Set the start and end time", "Create, preview and download the trimmed WAV"],
+    description: "Cut a time range from any audio file without re-encoding — same format, no quality loss — or export the cut as WAV, FLAC, MP3, M4A, Opus and more, without uploading the recording.", formats: ["MP3", "WAV", "FLAC", "OGG", "OPUS", "M4A", "AAC", "WebM", "AIFF", "WMA"],
+    steps: ["Choose an audio file", "Set the start and end time", "Cut losslessly or pick an output format, then preview and download"],
   },
   {
     slug: "audio-volume-changer", name: "Audio Volume Changer", shortName: "Volume Changer", category: "Audio", kind: "device", icon: "◒", accent: "lime",
-    description: "Reduce, mute or amplify audio up to 400% and export a lossless WAV locally in your browser.", formats: ["MP3", "WAV", "FLAC", "OGG", "OPUS", "M4A", "AAC", "WebM", "AIFF"],
-    steps: ["Choose an audio file", "Set the output volume", "Create, preview and download the adjusted WAV"],
+    description: "Reduce, mute or amplify audio up to 400% and export it as lossless WAV or FLAC, or as MP3, M4A, Opus and other formats, locally in your browser.", formats: ["MP3", "WAV", "FLAC", "OGG", "OPUS", "M4A", "AAC", "WebM", "AIFF"],
+    steps: ["Choose an audio file", "Set the output volume and format", "Create, preview and download the adjusted file"],
   },
   {
     slug: "video-joiner", name: "Video Joiner", shortName: "Video Joiner", category: "Video", kind: "device", icon: "▶", accent: "cyan",
-    description: "Combine compatible video clips or folders in order and record one high-quality WebM on your device.", formats: ["MP4", "WebM", "MOV", "M4V", "OGV"],
-    steps: ["Choose clips or a video folder", "Arrange the playback order", "Record and download one WebM"],
+    description: "Combine clips or folders in order. Matching clips are joined losslessly in seconds; mixed sources are re-recorded into one high-quality WebM or MP4 on your device.", formats: ["MP4", "WebM", "MOV", "M4V", "MKV", "OGV"],
+    steps: ["Choose clips or a video folder", "Arrange the playback order", "Join losslessly when codecs match, otherwise record one file"],
+  },
+  {
+    slug: "video-converter", name: "Video Converter", shortName: "Video Converter", category: "Video", kind: "device", icon: "⇄", accent: "violet",
+    description: "Convert video to MP4, WebM, MKV or MOV in your browser. Codecs that already fit the target container are copied losslessly in seconds; otherwise H.264/VP8 re-encoding with quality, resolution, frame-rate and rotation control.", formats: ["MP4", "WebM", "MKV", "MOV", "AVI", "WMV", "TS", "MPEG", "3GP", "FLV", "OGV"],
+    steps: ["Choose a video file", "Pick the container, quality and any resize or rotation", "Convert — lossless copy when possible — then preview and download"],
+  },
+  {
+    slug: "video-compressor", name: "Video Compressor", shortName: "Compress Video", category: "Video", kind: "device", icon: "⇲", accent: "lime",
+    description: "Shrink a video by quality level or to a target size in MB with H.264 encoding, optional 1080p/720p caps and frame-rate limits — entirely on your device.", formats: ["MP4", "MOV", "MKV", "WebM", "AVI", "WMV"],
+    steps: ["Choose a video file", "Pick a quality level or enter a target size", "Compress, compare sizes and download"],
+  },
+  {
+    slug: "video-trimmer", name: "Video Trimmer & Cutter", shortName: "Video Trimmer", category: "Video", kind: "device", icon: "✂", accent: "rose",
+    description: "Cut a clip from a video losslessly in seconds (keyframe-accurate) or frame-accurately with a fast re-encode, without uploading the file.", formats: ["MP4", "MOV", "MKV", "WebM", "AVI", "TS"],
+    steps: ["Choose a video file", "Set start and end times", "Cut losslessly or frame-accurately, then download"],
+  },
+  {
+    slug: "video-to-audio", name: "Extract Audio from Video", shortName: "Video to Audio", category: "Video", kind: "device", icon: "♪", accent: "amber",
+    description: "Pull the soundtrack out of a video as MP3, M4A, WAV, FLAC, Opus or Ogg. Matching codecs are copied bit-for-bit; others are encoded at your chosen bitrate.", formats: ["MP4", "MOV", "MKV", "WebM", "AVI", "MP3", "M4A", "WAV", "FLAC", "OPUS"],
+    steps: ["Choose a video file", "Pick the audio format and bitrate", "Extract, preview and download"],
+  },
+  {
+    slug: "video-to-gif", name: "Video to GIF", shortName: "Video to GIF", category: "Video", kind: "device", icon: "GIF", accent: "cyan",
+    description: "Turn a clip into a smooth, palette-optimized animated GIF with a chosen time range, frame rate and width — processed privately in your browser.", formats: ["MP4", "MOV", "MKV", "WebM", "GIF"],
+    steps: ["Choose a video file", "Set the time range, frame rate and width", "Render the GIF and download"],
   },
   {
     slug: "merge-pdf", name: "Merge PDF", shortName: "Merge PDF", category: "PDF", kind: "device", icon: "⊕", accent: "violet",
@@ -67,8 +92,8 @@ export const tools: ToolDefinition[] = [
   },
   {
     slug: "compress-pdf", name: "Optimize PDF", shortName: "Compress PDF", category: "PDF", kind: "device", icon: "⇲", accent: "lime",
-    description: "Optimize PDF object streams and document structure. Image-heavy documents may require a cloud compression provider.", formats: ["PDF"],
-    steps: ["Choose a PDF", "Optimize its internal structure", "Compare and download the result"],
+    description: "Shrink a PDF on your device: embedded photos are re-encoded at a chosen quality and resolution while text, vectors, fonts and links stay untouched, and orphaned data from earlier saves is removed.", formats: ["PDF"],
+    steps: ["Choose a PDF", "Pick image quality and a maximum image size, or structure-only mode", "Compare sizes and download the result"],
   },
   {
     slug: "rotate-pdf", name: "Rotate PDF", shortName: "Rotate PDF", category: "PDF", kind: "device", icon: "↻", accent: "cyan",
@@ -87,28 +112,38 @@ export const tools: ToolDefinition[] = [
   },
   {
     slug: "jpg-to-pdf", name: "JPG & PNG to PDF", shortName: "Images to PDF", category: "PDF", kind: "device", icon: "▧", accent: "rose",
-    description: "Create a polished multi-page PDF from JPG and PNG images in your chosen order.", formats: ["JPG", "PNG", "PDF"],
-    steps: ["Choose JPG or PNG images", "Arrange the page order", "Create and download the PDF"],
+    description: "Create a polished multi-page PDF from JPG, PNG, WebP, HEIC, AVIF, TIFF, GIF, BMP or SVG images in your chosen order.", formats: ["JPG", "PNG", "WebP", "HEIC", "AVIF", "TIFF", "GIF", "BMP", "SVG", "PDF"],
+    steps: ["Choose images in any common format", "Arrange the page order", "Create and download the PDF"],
+  },
+  {
+    slug: "pdf-to-image", name: "PDF to JPG, PNG & WebP", shortName: "PDF to Image", category: "PDF", kind: "device", icon: "▣", accent: "cyan",
+    description: "Render every PDF page — or a page range — to JPG, PNG or WebP at 72 to 300 dpi with the pdf.js engine, entirely in your browser, and download the set as a ZIP.", formats: ["PDF", "JPG", "PNG", "WebP"],
+    steps: ["Choose a PDF", "Pick the format, resolution and pages", "Render and download every page or one ZIP"],
+  },
+  {
+    slug: "pdf-to-text", name: "Extract Text from PDF", shortName: "PDF to Text", category: "PDF", kind: "device", icon: "Tt", accent: "amber",
+    description: "Read the real text layer out of a PDF with page markers and reconstructed line breaks, copy it or save a .txt — on your device, with no upload.", formats: ["PDF", "TXT"],
+    steps: ["Choose a PDF", "Extract the text layer", "Copy, download or send it to an AI Studio workflow"],
   },
   {
     slug: "image-editor", name: "Image Editor", shortName: "Image Editor", category: "Image", kind: "device", icon: "✦", accent: "violet",
-    description: "Crop, resize, rotate and convert images on your device — opens HEIC, TIFF, JPG, PNG, WebP, GIF, BMP and AVIF, with exact px, inch, cm or percent dimensions and high-quality resampling.", formats: ["JPG", "PNG", "WebP", "AVIF", "GIF", "BMP", "ICO", "HEIC", "TIFF"],
+    description: "Crop, resize, rotate and convert images on your device — opens HEIC, TIFF, SVG, JPG, PNG, WebP, GIF, BMP and AVIF, exports JPG, PNG, WebP, AVIF, GIF, BMP, ICO or TIFF, with exact px, inch, cm or percent dimensions and high-quality resampling.", formats: ["JPG", "PNG", "WebP", "AVIF", "GIF", "BMP", "ICO", "TIFF", "HEIC", "SVG"],
     steps: ["Choose an image", "Crop, resize, rotate or flip with clear dimensions", "Pick a format and export"],
   },
   {
     slug: "image-compressor", name: "Image Compressor", shortName: "Compress Image", category: "Image", kind: "device", icon: "◫", accent: "lime",
-    description: "Shrink image size with a live preview, high-quality resampling and a quality slider — crop and resize in the same editor.", formats: ["JPG", "PNG", "WebP", "AVIF"],
-    steps: ["Choose an image", "Set the size, format and quality", "Export the optimized image"],
+    description: "Shrink image size with a live preview, high-quality resampling and a quality slider — one image in the editor or a whole folder in batch mode with a single ZIP download.", formats: ["JPG", "PNG", "WebP", "AVIF", "HEIC", "TIFF"],
+    steps: ["Choose an image or a folder", "Set the size, format and quality", "Export the optimized image or ZIP"],
   },
   {
     slug: "image-resizer", name: "Image Resizer", shortName: "Resize Image", category: "Image", kind: "device", icon: "↔", accent: "cyan",
-    description: "Resize to exact width and height in px, inch, cm or percent with a DPI, aspect lock and crisp stepped resampling.", formats: ["JPG", "PNG", "WebP", "AVIF"],
-    steps: ["Choose an image", "Enter exact dimensions and units", "Download the resized file"],
+    description: "Resize to exact width and height in px, inch, cm or percent with a DPI, aspect lock and crisp stepped resampling — or cap a whole folder to a maximum size in batch mode.", formats: ["JPG", "PNG", "WebP", "AVIF", "HEIC", "TIFF"],
+    steps: ["Choose an image or a folder", "Enter exact dimensions and units", "Download the resized file or ZIP"],
   },
   {
     slug: "image-converter", name: "Image Converter", shortName: "Image Converter", category: "Image", kind: "device", icon: "⇄", accent: "violet",
-    description: "Convert images to JPG, PNG, WebP, AVIF, GIF, BMP or ICO at full resolution — opens HEIC and TIFF too, entirely in your browser.", formats: ["JPG", "PNG", "WebP", "AVIF", "GIF", "BMP", "ICO", "HEIC", "TIFF"],
-    steps: ["Choose an image", "Select the output format and quality", "Convert and download"],
+    description: "Convert images to JPG, PNG, WebP, AVIF, GIF, BMP, ICO or TIFF at full resolution — opens HEIC, TIFF and SVG too — one at a time or a whole folder to a ZIP, entirely in your browser.", formats: ["JPG", "PNG", "WebP", "AVIF", "GIF", "BMP", "ICO", "TIFF", "HEIC", "SVG"],
+    steps: ["Choose an image or a folder", "Select the output format and quality", "Convert and download the file or ZIP"],
   },
   {
     slug: "tap-bpm", name: "Tap BPM", shortName: "Tap BPM", category: "Music", kind: "device", icon: "♩", accent: "rose",
@@ -264,7 +299,7 @@ export const tools: ToolDefinition[] = [
 ];
 
 export const toolBySlug = Object.fromEntries(tools.map((tool) => [tool.slug, tool])) as Record<string, ToolDefinition>;
-export const quickToolSlugs = ["metadata-remover", "audio-downloader", "audio-converter", "audio-joiner", "merge-pdf", "image-converter"];
+export const quickToolSlugs = ["metadata-remover", "video-converter", "audio-converter", "compress-pdf", "pdf-to-image", "image-converter"];
 export const quickTools = quickToolSlugs.map((slug) => toolBySlug[slug]);
 export const categories: Array<"All" | ToolCategory> = ["All", "Privacy", "Audio", "Video", "PDF", "Image", "Music", "SEO", "Developer", "AI Studio"];
 

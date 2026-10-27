@@ -4,6 +4,10 @@ export type Guide = {
   description: string;
   answer: string;
   tool?: string;
+  /** Overrides the tool link when the workspace is not under /tools. */
+  href?: string;
+  /** ISO date; guides without one date from the first guide release. */
+  published?: string;
   steps: string[];
   sections: Array<{ heading: string; body: string }>;
 };
@@ -11,11 +15,11 @@ export type Guide = {
 export const guides: Guide[] = [
   {
     slug: "convert-audio-formats-in-browser",
-    title: "How to convert audio between MP3, WAV, FLAC, Ogg, Opus and M4A",
-    description: "Choose the right audio format and convert it locally in your browser without uploading the source file.",
-    answer: "Choose an output format based on compatibility and quality, add one audio file, select a bitrate for lossy formats, then convert and preview the result. Trenith Tools supports MP3, WAV, FLAC, Ogg Vorbis, Opus and M4A/AAC output through a local FFmpeg WebAssembly engine.",
+    title: "How to convert audio between MP3, WAV, FLAC, ALAC, Ogg, Opus, M4A and more",
+    description: "Choose the right audio format and convert one file or a whole folder locally in your browser without uploading the source.",
+    answer: "Choose an output format based on compatibility and quality, add one file or a folder, select a bitrate for lossy formats (and sample rate, channels or bit depth when they matter), then convert and preview the result. Trenith Tools produces MP3, M4A/AAC, WAV, FLAC, ALAC, AIFF, Ogg Vorbis, Opus, WebM, WavPack, AC3 and WMA through a local FFmpeg WebAssembly engine, carrying tags and cover art into the new file. Folders download as one ZIP.",
     tool: "audio-converter",
-    steps: ["Choose the source audio and an output format.", "Set a bitrate when converting to MP3, Ogg, Opus or M4A.", "Convert locally, preview the result and download the new file."],
+    steps: ["Choose the source audio (or a folder) and an output format.", "Set a bitrate when converting to a lossy format; keep tags on unless you are sharing the file.", "Convert locally, preview the result and download the file or ZIP."],
     sections: [
       { heading: "Lossless or lossy", body: "WAV and FLAC preserve the decoded audio without another lossy encoding step. MP3, AAC, Ogg Vorbis and Opus trade some information for much smaller files. Converting one lossy format to another cannot restore quality that was already removed." },
       { heading: "Which format should you choose", body: "MP3 has the broadest legacy compatibility. M4A/AAC is common on phones and video platforms. Opus is efficient for speech and modern web use. Ogg Vorbis is open and widely supported. FLAC is useful for lossless archives, while WAV is simple and editor-friendly but large." },
@@ -97,6 +101,48 @@ export const guides: Guide[] = [
       { heading: "Minimize before sharing", body: "Remove blank, internal, duplicate and unrelated pages. Data minimization reduces accidental disclosure and makes the document easier for the recipient to navigate." },
       { heading: "Metadata and redaction differ", body: "Removing document properties does not redact visible words or underlying PDF objects. Drawing a black rectangle over text is not safe redaction. Use a dedicated redaction workflow for confidential content." },
       { heading: "Final quality check", body: "Confirm fonts, form fields, hyperlinks, page labels, bookmarks, reading order and signatures. Compression can affect images and scanned text, so compare critical pages with the original." },
+    ],
+  },
+  {
+    slug: "convert-video-without-losing-quality",
+    title: "How to convert video between MP4, MKV, WebM and MOV without losing quality",
+    description: "Understand when a video conversion is a free lossless remux and when it has to re-encode, and choose settings that keep quality.",
+    answer: "A container change (MP4 to MKV, MOV to MP4) is lossless and takes seconds when the audio and video codecs already fit the new container: the streams are copied bit for bit. Only a codec change (anything to WebM, or a resolution, frame-rate or size change) needs re-encoding, and quality is then set by the quality slider rather than the output size. Trenith Tools plans each job and tells you which case applies before it runs.",
+    tool: "video-converter",
+    published: "2026-10-27",
+    steps: ["Add the video and choose the target container; the plan line says whether it will remux or encode.", "For an encode, pick a quality level first and only set resolution, frame rate or rotation when you need them.", "Convert locally, check the result in the preview and download it."],
+    sections: [
+      { heading: "Remux versus encode", body: "MP4, MOV and MKV all hold H.264 and AAC, so moving between them is a container rewrite with no generation loss. WebM only holds VP8/VP9 and Opus/Vorbis, so converting a phone recording to WebM always re-encodes. MKV accepts almost anything, which makes it the safest lossless target." },
+      { heading: "Quality settings that matter", body: "Constant-quality encoding (the quality slider) keeps detail consistent across easy and hard scenes; a target size instead fixes the bitrate and lets quality vary. Never upscale: the converter only reduces resolution. Keep the original frame rate unless the file is going to a platform that re-encodes anyway." },
+      { heading: "Time and limits in a browser", body: "Encoding runs on a single-threaded WebAssembly engine, so an H.264 encode is slower than real time for long 1080p clips, while a remux or audio extraction finishes in seconds. For long sources, trim first or lower the resolution, and keep the tab in the foreground." },
+    ],
+  },
+  {
+    slug: "compress-pdf-without-ruining-text",
+    title: "How to compress a PDF without ruining the text",
+    description: "Shrink a PDF by recompressing its embedded images while leaving fonts, vectors, links and the text layer untouched.",
+    answer: "Most oversized PDFs are large because of embedded photos and scans, not text. Recompress those images at a lower quality and a sensible maximum resolution and the file shrinks while every word, link and vector drawing stays exactly as it was. Trenith Tools does this on the device and reports how many images it touched and the before-and-after size.",
+    tool: "compress-pdf",
+    published: "2026-10-27",
+    steps: ["Add the PDF and pick a quality level (medium is usually invisible on screen).", "Lower the maximum image resolution for documents that will only be read on screen.", "Compress locally, compare a photo-heavy page with the original and download the smaller file."],
+    sections: [
+      { heading: "What actually gets smaller", body: "The compressor decodes each embedded image, re-encodes it as JPEG at the chosen quality (downscaling very large images), and swaps it into the same page. Text, fonts, form fields, bookmarks and vector graphics are not rasterized or altered. A PDF that is already mostly text will not shrink much, and the tool says so." },
+      { heading: "Choosing quality and resolution", body: "Screens rarely need more than 150 dpi, so a 1600-pixel cap keeps most pages sharp. For documents that will be printed, keep a higher resolution and a higher quality. Images with transparency masks are left alone so nothing is flattened incorrectly." },
+      { heading: "Orphans and verification", body: "Compression also sweeps objects that an earlier editor left behind, which removes stale copies of pages and images. Open the result in a second viewer and check a few photo pages and the page count before discarding the original." },
+    ],
+  },
+  {
+    slug: "keep-a-watch-party-in-sync",
+    title: "How to keep a watch party in sync when everyone's connection is different",
+    description: "Why synchronized playback drifts, what Trenith Watch Together does about it, and what the host can do when a guest falls behind.",
+    answer: "Drift comes from three places: clocks that disagree, commands that arrive late, and players that buffer or pause on their own. Trenith Watch Together aligns every room clock with the signaling server, projects each command to the position the host has reached by the time it arrives, re-broadcasts the host position every five seconds while playing, and shows each guest's drift in the roster so the host can resync everyone with one click.",
+    href: "/watch-together",
+    published: "2026-10-27",
+    steps: ["Create the room, connect your provider tab and invite guests with the private link.", "Watch the roster: 'in sync' means within three-quarters of a second of the host; 'behind' or 'ahead' means a guest has drifted.", "Click Resync to pull everyone to the host position, or hand over hosting to the person with the steadiest connection."],
+    sections: [
+      { heading: "Why rooms used to drift", body: "If a seek is applied using the timestamp it carried, every guest lands behind the host by the network delay, and that gap never closes. Buffering stalls add more. Protocol 2 corrects both: positions are projected for their age before they are applied, and the host heartbeat catches stalled guests." },
+      { heading: "Host handover and locks", body: "If the host's tab closes or goes silent for about 45 seconds, the room promotes the longest-present guest automatically so playback control never disappears. The host can also transfer control deliberately, remove a disruptive participant, or lock the room once everyone has arrived." },
+      { heading: "Provider differences", body: "Netflix ignores seeks sent to its HTML5 element, so the companion drives its page player API instead. Advertisement breaks on ad-supported plans pause synchronization rather than seeking through them. Each person still needs their own authorized provider account; nothing is streamed by Trenith." },
     ],
   },
 ];

@@ -3,15 +3,21 @@
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { clearRoomSession, endRoom, getIceServers, getRoomEvents, joinRoom, leaveRoom, loadRoomSession, saveRoomSession, sendRoomEvent } from "../lib/watch-client";
+import { clearRoomSession, endRoom, getIceServers, getRoomEvents, joinRoom, leaveRoom, loadRoomSession, removeParticipant, saveRoomSession, sendRoomEvent, setRoomLock, transferHost } from "../lib/watch-client";
 import { decryptWatchMessage, encryptWatchMessage, importWatchRoomKey } from "../lib/watch-crypto";
-import { WATCH_MEDIA_PARTICIPANT_LIMIT, WATCH_PROVIDERS, type WatchParticipant, type WatchRoomMessage, type WatchRoomSession } from "../packages/watch-core";
+import {
+  WATCH_HEARTBEAT_MS, WATCH_MEDIA_PARTICIPANT_LIMIT, WATCH_PROVIDERS, WATCH_STATUS_MS, WATCH_SYNC_PARTICIPANT_LIMIT,
+  describeDrift, estimateClockOffset, projectPlaybackPosition, smoothClockOffset,
+  type PlaybackSnapshot, type WatchParticipant, type WatchPlaybackAction, type WatchRoomMessage, type WatchRoomSession,
+} from "../packages/watch-core";
 import { WatchVideo } from "./watch-video";
 
-type ChatItem = { id: string; senderId: string; text: string; sentAt: number };
+type ChatItem = { id: string; senderId: string; text: string; sentAt: number; system?: boolean };
 type RoomCredentials = { session: WatchRoomSession; secret: string; proof: string };
 type PeerRecord = { connection: RTCPeerConnection; makingOffer: boolean; ignoreOffer: boolean; pendingCandidates: RTCIceCandidateInit[] };
 type BridgeMessage = { source?: string; type?: string; payload?: Record<string, unknown> };
+type PlayerState = { title: string; currentTime: number; duration: number; paused: boolean; playbackRate: number; provider: string; contentKey: string; adapter: string; connected: boolean };
+type PeerStatus = PlaybackSnapshot & { contentKey: string; connected: boolean; receivedAt: number };
 
 const emojiChoices = ["❤️", "😂", "😮", "👏", "🔥"];
 
@@ -24,6 +30,11 @@ function initials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
 }
 
+function clock(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "--:--:--";
+  return new Date(seconds * 1000).toISOString().slice(11, 19);
+}
+
 export function WatchRoom({ roomId }: { roomId: string }) {
   const router = useRouter();
   const [credentials, setCredentials] = useState<RoomCredentials | null>(null);
@@ -32,22 +43,28 @@ export function WatchRoom({ roomId }: { roomId: string }) {
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState("");
   const [participants, setParticipants] = useState<WatchParticipant[]>([]);
+  const [hostId, setHostId] = useState<string | null>(null);
+  const [locked, setLocked] = useState(false);
+  const [controlMode, setControlMode] = useState<"host" | "everyone">("host");
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [message, setMessage] = useState("");
-  const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "recovering" | "ended">("connecting");
+  const [connectionState, setConnectionState] = useState<"connecting" | "connected" | "recovering" | "ended" | "removed">("connecting");
   const [extensionState, setExtensionState] = useState<"checking" | "ready" | "missing" | "player">("checking");
-  const [playback, setPlayback] = useState({ title: "Waiting for a streaming tab", currentTime: 0, duration: 0, paused: true, provider: fragment.provider });
+  const [player, setPlayer] = useState<PlayerState>({ title: "Waiting for a streaming tab", currentTime: 0, duration: 0, paused: true, playbackRate: 1, provider: "generic", contentKey: "", adapter: "html5", connected: false });
+  const [peerStatus, setPeerStatus] = useState<Record<string, PeerStatus>>({});
+  const [peerMedia, setPeerMedia] = useState<Record<string, { microphone: boolean; camera: boolean }>>({});
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   const [micOn, setMicOn] = useState(false);
-  // Which device is waiting on the browser permission prompt. Without this the
-  // button gave no feedback at all while the prompt sat unanswered, which reads
-  // as "the microphone is broken".
   const [mediaPending, setMediaPending] = useState<"audio" | "video" | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   const [mediaError, setMediaError] = useState("");
   const [relayAvailable, setRelayAvailable] = useState(false);
-  const [reaction, setReaction] = useState<{ emoji: string; id: string } | null>(null);
+  const [reactions, setReactions] = useState<Array<{ emoji: string; id: string; left: number }>>([]);
+  // Local and server-aligned wall clock, refreshed once a second so the drift
+  // roster re-renders with current projections without touching refs or
+  // Date.now() during render. Zero until the first tick.
+  const [wallClock, setWallClock] = useState({ local: 0, server: 0 });
   const keyRef = useRef<CryptoKey | null>(null);
   const participantsRef = useRef<WatchParticipant[]>([]);
   const peersRef = useRef(new Map<string, PeerRecord>());
@@ -56,9 +73,25 @@ export function WatchRoom({ roomId }: { roomId: string }) {
   const lastSeqRef = useRef(0);
   const stoppedRef = useRef(false);
   const sendingRef = useRef(false);
+  const offsetRef = useRef<number | null>(null);
+  const playerRef = useRef(player);
+  const lastHeartbeatRef = useRef(0);
+  const lastStatusRef = useRef(0);
+  const hostIdRef = useRef<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { participantsRef.current = participants; }, [participants]);
   useEffect(() => { localStreamRef.current = localStream; }, [localStream]);
+  useEffect(() => { playerRef.current = player; }, [player]);
+  useEffect(() => { hostIdRef.current = hostId; }, [hostId]);
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ block: "end" }); }, [chat]);
+  // Re-render the drift table every second so projected positions stay current.
+  useEffect(() => {
+    const update = () => setWallClock({ local: Date.now(), server: Date.now() + (offsetRef.current ?? 0) });
+    const first = window.setTimeout(update, 0);
+    const timer = window.setInterval(update, 1000);
+    return () => { window.clearTimeout(first); window.clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
     const found = getFragment();
@@ -68,6 +101,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
       if (saved?.secret === found.secret || (saved && !found.secret)) {
         setCredentials(saved);
         setParticipants(saved.session.participants);
+        setControlMode(saved.session.controlMode);
       }
       window.postMessage({ source: "TRENITH_WATCH_WEB", command: "ping" }, location.origin);
     });
@@ -76,8 +110,17 @@ export function WatchRoom({ roomId }: { roomId: string }) {
   }, [roomId]);
 
   const provider = useMemo(() => WATCH_PROVIDERS.find((item) => item.id === (credentials?.session.provider || fragment.provider)) || WATCH_PROVIDERS.at(-1)!, [credentials, fragment.provider]);
-  const self = participants.find((item) => item.id === credentials?.session.participantId);
-  const canControl = credentials?.session.controlMode === "everyone" || credentials?.session.role === "host";
+  const selfId = credentials?.session.participantId;
+  const self = participants.find((item) => item.id === selfId);
+  // The roster, not the remembered session, decides who is host: the room can
+  // hand over while this tab is open.
+  const isHost = Boolean(selfId && (hostId ? hostId === selfId : self?.role === "host"));
+  const canControl = controlMode === "everyone" || isHost;
+  const serverNow = () => Date.now() + (offsetRef.current ?? 0);
+
+  const systemMessage = useCallback((text: string) => {
+    setChat((items) => [...items.slice(-199), { id: crypto.randomUUID(), senderId: "system", text, sentAt: Date.now(), system: true }]);
+  }, []);
 
   async function join(event: FormEvent) {
     event.preventDefault();
@@ -90,6 +133,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
       saveRoomSession(session, fragment.secret, fragment.proof);
       setCredentials(next);
       setParticipants(session.participants);
+      setControlMode(session.controlMode);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "The room could not be joined.");
       setJoining(false);
@@ -140,6 +184,16 @@ export function WatchRoom({ roomId }: { roomId: string }) {
     return record;
   }, [broadcast, negotiate]);
 
+  // Apply a remote playback message to the local player, projecting the
+  // sender's position forward by the message age so network latency and
+  // polling delay are compensated rather than baked into the drift.
+  const applyRemotePlayback = useCallback((roomMessage: Extract<WatchRoomMessage, { type: "playback" }>) => {
+    const paused = roomMessage.paused ?? roomMessage.action === "pause";
+    const projected = projectPlaybackPosition({ currentTime: roomMessage.currentTime, playbackRate: roomMessage.playbackRate, paused, sentAt: roomMessage.sentAt }, serverNow());
+    window.postMessage({ source: "TRENITH_WATCH_WEB", command: "apply-playback", payload: { ...roomMessage, currentTime: projected, paused } }, location.origin);
+    setPlayer((current) => ({ ...current, currentTime: projected, paused: roomMessage.action === "pause" ? true : roomMessage.action === "play" ? false : paused }));
+  }, []);
+
   const handleSignal = useCallback(async (senderId: string, roomMessage: WatchRoomMessage) => {
     if (!credentials || senderId === credentials.session.participantId) return;
     if (roomMessage.type === "peer-offer") {
@@ -166,17 +220,29 @@ export function WatchRoom({ roomId }: { roomId: string }) {
     } else if (roomMessage.type === "chat") {
       setChat((items) => items.some((item) => item.id === roomMessage.id) ? items : [...items.slice(-199), { ...roomMessage, senderId }]);
     } else if (roomMessage.type === "reaction") {
-      setReaction({ emoji: roomMessage.emoji, id: `${senderId}-${roomMessage.sentAt}` });
-      window.setTimeout(() => setReaction(null), 1800);
+      const id = `${senderId}-${roomMessage.sentAt}`;
+      setReactions((current) => [...current.slice(-5), { emoji: roomMessage.emoji, id, left: 20 + Math.random() * 60 }]);
+      window.setTimeout(() => setReactions((current) => current.filter((item) => item.id !== id)), 1800);
     } else if (roomMessage.type === "playback") {
-      window.postMessage({ source: "TRENITH_WATCH_WEB", command: "apply-playback", payload: roomMessage }, location.origin);
-      setPlayback((current) => ({ ...current, currentTime: roomMessage.currentTime, paused: roomMessage.action === "pause" ? true : roomMessage.action === "play" ? false : current.paused }));
+      // Only the room's controller may steer; in "everyone" mode any member may.
+      const senderIsHost = senderId === hostIdRef.current;
+      if (controlMode === "everyone" || senderIsHost) applyRemotePlayback(roomMessage);
+    } else if (roomMessage.type === "sync-status") {
+      const status: PeerStatus = { currentTime: roomMessage.currentTime, playbackRate: roomMessage.playbackRate, paused: roomMessage.paused, sentAt: roomMessage.sentAt, contentKey: roomMessage.contentKey, connected: roomMessage.connected, receivedAt: Date.now() };
+      setPeerStatus((current) => ({ ...current, [senderId]: status }));
+    } else if (roomMessage.type === "media-state") {
+      setPeerMedia((current) => ({ ...current, [senderId]: { microphone: roomMessage.microphone, camera: roomMessage.camera } }));
     } else if (roomMessage.type === "content-change") {
-      setPlayback((current) => ({ ...current, title: roomMessage.title || "Streaming title" }));
+      setPlayer((current) => ({ ...current, title: roomMessage.title || "Streaming title" }));
+    } else if (roomMessage.type === "room-locked") {
+      setLocked(roomMessage.locked);
+      systemMessage(roomMessage.locked ? "The host locked the room. No one else can join." : "The host unlocked the room.");
+    } else if (roomMessage.type === "kick") {
+      if (roomMessage.participantId === credentials.session.participantId) { setConnectionState("removed"); stoppedRef.current = true; }
     } else if (roomMessage.type === "room-ended") {
       setConnectionState("ended");
     }
-  }, [broadcast, credentials, ensurePeer]);
+  }, [applyRemotePlayback, broadcast, controlMode, credentials, ensurePeer, systemMessage]);
 
   useEffect(() => {
     if (!credentials) return;
@@ -184,6 +250,8 @@ export function WatchRoom({ roomId }: { roomId: string }) {
     let controller: AbortController | null = null;
     let timer = 0;
     let failures = 0;
+    let knownIds = new Set(participantsRef.current.map((item) => item.id));
+    let knownHost: string | null = null;
     void importWatchRoomKey(credentials.secret).then((key) => { keyRef.current = key; });
     void getIceServers(roomId, credentials.session.participantToken).then((result) => {
       iceServersRef.current = result.iceServers;
@@ -193,11 +261,29 @@ export function WatchRoom({ roomId }: { roomId: string }) {
     const poll = async () => {
       if (stoppedRef.current) return;
       controller = new AbortController();
+      const sentAt = Date.now();
       try {
         const result = await getRoomEvents(roomId, credentials.session.participantToken, lastSeqRef.current, controller.signal);
+        offsetRef.current = smoothClockOffset(offsetRef.current, estimateClockOffset(sentAt, result.serverTime, Date.now()));
         failures = 0;
         setConnectionState("connected");
         setParticipants(result.participants);
+        setLocked(result.locked);
+        setControlMode(result.controlMode);
+        setHostId(result.hostId);
+        hostIdRef.current = result.hostId;
+        // Roster diffs become system lines so arrivals, departures and
+        // handovers are visible without anyone typing.
+        const nextIds = new Set(result.participants.map((item) => item.id));
+        for (const participant of result.participants) if (!knownIds.has(participant.id) && participant.id !== credentials.session.participantId && knownIds.size) systemMessage(`${participant.displayName} joined`);
+        for (const participant of participantsRef.current) if (!nextIds.has(participant.id) && participant.id !== credentials.session.participantId) systemMessage(`${participant.displayName} left`);
+        if (knownHost && result.hostId && result.hostId !== knownHost) {
+          const promoted = result.participants.find((item) => item.id === result.hostId);
+          systemMessage(result.hostId === credentials.session.participantId ? "You are now the host" : `${promoted?.displayName || "A participant"} is now the host`);
+        }
+        knownHost = result.hostId;
+        knownIds = nextIds;
+        participantsRef.current = result.participants;
         const activeIds = new Set(result.participants.map((item) => item.id));
         for (const [peerId, record] of peersRef.current) if (!activeIds.has(peerId)) { record.connection.close(); peersRef.current.delete(peerId); }
         for (const event of result.events) {
@@ -213,22 +299,22 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         if ((caught as Error).name === "AbortError") return;
         failures += 1;
         setConnectionState(failures > 2 ? "recovering" : "connecting");
-        if (/ended|expired|authorization/i.test((caught as Error).message)) setConnectionState("ended");
+        if (/ended|expired/i.test((caught as Error).message)) setConnectionState("ended");
+        if (/authorization/i.test((caught as Error).message)) setConnectionState((state) => state === "removed" ? state : "ended");
       }
-      timer = window.setTimeout(poll, Math.min(4000, 700 + failures * 650));
+      if (stoppedRef.current) return;
+      // Poll faster while the player is running so remote play/pause/seek land
+      // within a fraction of a second; idle rooms back off to save battery.
+      const idle = playerRef.current.paused && !document.hasFocus();
+      const base = playerRef.current.connected && !playerRef.current.paused ? 450 : idle ? 2500 : 900;
+      timer = window.setTimeout(poll, Math.min(5000, base + failures * 650));
     };
     void poll();
     return () => { stoppedRef.current = true; controller?.abort(); clearTimeout(timer); };
-  }, [credentials, handleSignal, roomId]);
+  }, [credentials, handleSignal, roomId, systemMessage]);
 
   useEffect(() => {
     if (!credentials || participants.length > WATCH_MEDIA_PARTICIPANT_LIMIT) return;
-    // Every participant holds a peer record for every other participant. The
-    // previous id-ordering meant the higher-id side created no peers at all, so
-    // when that side enabled a microphone or camera the track was added to
-    // nothing and nobody ever heard or saw them. Creating both sides is safe:
-    // a trackless connection never fires negotiationneeded, and the polite/
-    // impolite rollback in handleSignal already resolves simultaneous offers.
     for (const participant of participants) {
       if (participant.id !== credentials.session.participantId) ensurePeer(participant.id);
     }
@@ -237,11 +323,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
   useEffect(() => {
     function receive(event: MessageEvent<BridgeMessage>) {
       if (event.source !== window || event.data?.source !== "TRENITH_WATCH_EXTENSION") return;
-      if (event.data.type === "extension-ready") setExtensionState("ready");
-      // The companion answers "Connect streaming tab" with guidance instead of
-      // opening its popup (Chrome refuses action.openPopup() without a user
-      // gesture in the extension's own UI). Surface that answer — dropping it
-      // is what made the button look dead.
+      if (event.data.type === "extension-ready") setExtensionState((state) => state === "player" ? state : "ready");
       if (event.data.type === "connect-help") {
         const payload = (event.data.payload || {}) as { opened?: boolean; error?: string };
         if (!payload.opened) setError(payload.error || "Open your streaming tab, then click the Trenith extension icon to connect it.");
@@ -250,17 +332,30 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         const payload = (event.data.payload || {}) as { applied?: boolean; error?: string };
         if (payload.applied === false && payload.error) setError(payload.error);
       }
-      if (event.data.type === "player-disconnected") setExtensionState("ready");
+      if (event.data.type === "player-disconnected") { setExtensionState("ready"); setPlayer((current) => ({ ...current, connected: false })); }
       if (event.data.type === "player-status") {
         setExtensionState("player");
         const payload = event.data.payload || {};
-        setPlayback({ title: String(payload.title || "Streaming title"), currentTime: Number(payload.currentTime || 0), duration: Number(payload.duration || 0), paused: Boolean(payload.paused), provider: String(payload.provider || provider.id) });
+        const next: PlayerState = { title: String(payload.title || "Streaming title"), currentTime: Number(payload.currentTime || 0), duration: Number(payload.duration || 0), paused: Boolean(payload.paused), playbackRate: Number(payload.playbackRate || 1), provider: String(payload.provider || provider.id), contentKey: String(payload.contentKey || ""), adapter: String(payload.adapter || "html5"), connected: payload.connected !== false };
+        setPlayer(next);
+        const now = Date.now();
+        // Everyone reports position for the roster; the controller additionally
+        // re-broadcasts its position while playing so guests converge.
+        if (credentials && next.connected && now - lastStatusRef.current > WATCH_STATUS_MS - 300) {
+          lastStatusRef.current = now;
+          void broadcast({ type: "sync-status", currentTime: next.currentTime, paused: next.paused, playbackRate: next.playbackRate, contentKey: next.contentKey, connected: true, sentAt: serverNow() });
+        }
+        const controller = hostIdRef.current ? hostIdRef.current === credentials?.session.participantId : false;
+        if (credentials && controller && next.connected && !next.paused && now - lastHeartbeatRef.current > WATCH_HEARTBEAT_MS - 300 && !sendingRef.current) {
+          lastHeartbeatRef.current = now;
+          void broadcast({ type: "playback", action: "snapshot", currentTime: next.currentTime, playbackRate: next.playbackRate, paused: false, sentAt: serverNow(), contentKey: next.contentKey });
+        }
       }
       if (event.data.type === "playback-event" && canControl && !sendingRef.current) {
         const payload = event.data.payload || {};
-        const action = String(payload.action || "snapshot") as "play" | "pause" | "seek" | "snapshot";
+        const action = String(payload.action || "snapshot") as WatchPlaybackAction;
         sendingRef.current = true;
-        void broadcast({ type: "playback", action, currentTime: Number(payload.currentTime || 0), playbackRate: Number(payload.playbackRate || 1), sentAt: Date.now(), contentKey: String(payload.contentKey || "unknown") }).finally(() => { sendingRef.current = false; });
+        void broadcast({ type: "playback", action, currentTime: Number(payload.currentTime || 0), playbackRate: Number(payload.playbackRate || 1), paused: action === "pause" ? true : action === "play" ? false : Boolean(payload.paused), sentAt: serverNow(), contentKey: String(payload.contentKey || "unknown") }).finally(() => { sendingRef.current = false; });
       }
     }
     window.addEventListener("message", receive);
@@ -286,18 +381,14 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         return;
       }
       setMediaPending(kind);
-      const media = await navigator.mediaDevices.getUserMedia({ audio: kind === "audio", video: kind === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false });
+      const media = await navigator.mediaDevices.getUserMedia({ audio: kind === "audio" ? { echoCancellation: true, noiseSuppression: true, autoGainControl: true } : false, video: kind === "video" ? { width: { ideal: 1280 }, height: { ideal: 720 } } : false });
       const stream = existing || new MediaStream();
       for (const track of media.getTracks()) stream.addTrack(track);
-      // Publish to the ref synchronously: ensurePeer() reads localStreamRef when
-      // it builds a connection, and the state effect that syncs it has not run
-      // yet, so a peer created in this same tick would otherwise get no tracks.
       localStreamRef.current = stream;
       for (const participant of participantsRef.current) {
         if (participant.id === credentials?.session.participantId) continue;
         const record = ensurePeer(participant.id);
         for (const track of media.getTracks()) {
-          // addTrack throws InvalidAccessError if the same track is added twice.
           if (!record.connection.getSenders().some((sender) => sender.track === track)) record.connection.addTrack(track, stream);
         }
       }
@@ -329,8 +420,9 @@ export function WatchRoom({ roomId }: { roomId: string }) {
   }
 
   async function react(emoji: string) {
-    setReaction({ emoji, id: crypto.randomUUID() });
-    window.setTimeout(() => setReaction(null), 1800);
+    const id = crypto.randomUUID();
+    setReactions((current) => [...current.slice(-5), { emoji, id, left: 20 + Math.random() * 60 }]);
+    window.setTimeout(() => setReactions((current) => current.filter((item) => item.id !== id)), 1800);
     await broadcast({ type: "reaction", emoji, sentAt: Date.now() });
   }
 
@@ -340,9 +432,46 @@ export function WatchRoom({ roomId }: { roomId: string }) {
     setError("Invitation copied. The secret stays in the URL fragment and is not sent in HTTP requests.");
   }
 
-  async function exit(end: boolean) {
+  async function resyncEveryone() {
+    const current = playerRef.current;
+    if (!current.connected) return setError("Connect your streaming tab first, then everyone can be pulled to your position.");
+    await broadcast({ type: "playback", action: "snapshot", currentTime: current.currentTime, playbackRate: current.playbackRate, paused: current.paused, sentAt: serverNow(), contentKey: current.contentKey });
+    systemMessage("You pulled everyone to your position");
+  }
+
+  async function hostAction(action: "transfer" | "remove", participant: WatchParticipant) {
     if (!credentials) return;
-    if (end) { await broadcast({ type: "room-ended", sentAt: Date.now() }); await endRoom(roomId, credentials.session.participantToken); }
+    try {
+      if (action === "transfer") {
+        await transferHost(roomId, credentials.session.participantToken, participant.id);
+        await broadcast({ type: "host-transfer", participantId: participant.id });
+        setHostId(participant.id);
+        systemMessage(`${participant.displayName} is now the host`);
+      } else {
+        await broadcast({ type: "kick", participantId: participant.id });
+        await removeParticipant(roomId, credentials.session.participantToken, participant.id);
+        systemMessage(`${participant.displayName} was removed`);
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The room action failed.");
+    }
+  }
+
+  async function toggleLock() {
+    if (!credentials) return;
+    try {
+      const result = await setRoomLock(roomId, credentials.session.participantToken, !locked);
+      setLocked(result.locked);
+      await broadcast({ type: "room-locked", locked: result.locked });
+      systemMessage(result.locked ? "You locked the room" : "You unlocked the room");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The room could not be locked.");
+    }
+  }
+
+  async function exit(mode: "leave" | "end") {
+    if (!credentials) return;
+    if (mode === "end") { await broadcast({ type: "room-ended", sentAt: Date.now() }); await endRoom(roomId, credentials.session.participantToken); }
     else await leaveRoom(roomId, credentials.session.participantToken);
     clearRoomSession(roomId);
     router.push("/watch-together");
@@ -353,30 +482,55 @@ export function WatchRoom({ roomId }: { roomId: string }) {
     <form className="watch-create-card" onSubmit={join}><div className="watch-form-title"><span>ROOM {roomId.slice(0, 6).toUpperCase()}</span><strong>How should friends see you?</strong><small>This name is visible only inside the temporary room.</small></div><label>Display name<input value={name} onChange={(event) => setName(event.target.value)} required maxLength={32} autoFocus autoComplete="nickname" placeholder="Your name" /></label>{error && <p className="watch-form-error" role="alert">{error}</p>}<p className="watch-legal-note">By joining, you confirm you are 18+ and agree to the <a href="/terms">Watch Together terms</a>. You need your own lawful access to {provider.name}. If you turn on your camera or microphone, your network address can become visible to others in the room.</p><button className="watch-create-button" disabled={joining}>{joining ? "Joining securely…" : "Join watch room →"}</button><Link className="watch-text-link" href="/watch-together">Create a different room</Link></form>
   </section>;
 
-  const progress = playback.duration > 0 ? Math.min(100, playback.currentTime / playback.duration * 100) : 0;
+  const progress = player.duration > 0 ? Math.min(100, player.currentTime / player.duration * 100) : 0;
+  const nowServer = wallClock.server;
+  const clockReady = wallClock.server > 0;
+  const referenceStatus: PlaybackSnapshot | null = !clockReady ? null : isHost
+    ? (player.connected ? { currentTime: player.currentTime, playbackRate: player.playbackRate, paused: player.paused, sentAt: nowServer } : null)
+    : (hostId && peerStatus[hostId]) || null;
+  const mediaTiles = participants.filter((item) => item.id !== selfId);
+  const mediaAllowed = participants.length <= WATCH_MEDIA_PARTICIPANT_LIMIT;
+
   return <div className="watch-room-shell">
-    <header className="watch-room-topbar"><div><span className={`watch-live-dot ${connectionState}`} /> <strong>{connectionState === "connected" ? "Room live" : connectionState}</strong><span>{provider.name}</span><code>{roomId.slice(0, 6).toUpperCase()}</code></div><div><button onClick={copyInvite}>Copy invite</button><Link href="/watch-together/supported">Setup help</Link><button className="watch-leave" onClick={() => void exit(credentials.session.role === "host")}>{credentials.session.role === "host" ? "End room" : "Leave"}</button></div></header>
+    <header className="watch-room-topbar"><div><span className={`watch-live-dot ${connectionState}`} /> <strong>{connectionState === "connected" ? "Room live" : connectionState === "removed" ? "Removed" : connectionState}</strong><span>{provider.name}</span><code>{roomId.slice(0, 6).toUpperCase()}</code>{locked && <span className="watch-lock-chip">Locked</span>}</div><div><button onClick={copyInvite} disabled={locked}>Copy invite</button>{isHost && <button onClick={() => void toggleLock()}>{locked ? "Unlock room" : "Lock room"}</button>}<Link href="/watch-together/supported">Setup help</Link><button className="watch-leave" onClick={() => void exit("leave")}>Leave</button>{isHost && <button className="watch-leave watch-end" onClick={() => void exit("end")}>End for everyone</button>}</div></header>
     {connectionState === "ended" && <div className="watch-ended"><strong>This watch room has ended.</strong><Link href="/watch-together">Create another room</Link></div>}
+    {connectionState === "removed" && <div className="watch-ended"><strong>The host removed you from this room.</strong><Link href="/watch-together">Create your own room</Link></div>}
     <main className="watch-room-grid">
       <section className="watch-stage">
-        <div className="watch-now-playing"><div><span>NOW SYNCING</span><h1>{playback.title}</h1><p>{provider.name} · Each viewer watches from their own authorized account</p></div><div className={`extension-pill ${extensionState}`}>{extensionState === "player" ? "✓ OTT tab connected" : extensionState === "ready" ? "Extension ready" : extensionState === "missing" ? "Extension not detected" : "Checking extension"}</div></div>
+        <div className="watch-now-playing"><div><span>NOW SYNCING</span><h1>{player.title}</h1><p>{provider.name} · {isHost ? "You control playback" : controlMode === "everyone" ? "Everyone can control playback" : `${participants.find((item) => item.id === hostId)?.displayName || "The host"} controls playback`}{player.adapter === "page" ? " · native player adapter" : ""}</p></div><div className={`extension-pill ${extensionState}`}>{extensionState === "player" ? "✓ Streaming tab connected" : extensionState === "ready" ? "Extension ready" : extensionState === "missing" ? "Extension not detected" : "Checking extension"}</div></div>
         <div className="watch-player-card">
-          <div className="watch-player-art"><div className="watch-signal-rings"><i /><i /><i /><span>{playback.paused ? "Ⅱ" : "▶"}</span></div><p>The movie stays in your {provider.name} tab.<br />This room carries only timing and social signals.</p></div>
-          <div className="watch-timeline"><span>{new Date(playback.currentTime * 1000).toISOString().slice(11, 19)}</span><div><i style={{ width: `${progress}%` }} /></div><span>{playback.duration ? new Date(playback.duration * 1000).toISOString().slice(11, 19) : "--:--:--"}</span></div>
-          <div className="watch-player-actions"><button onClick={() => window.postMessage({ source: "TRENITH_WATCH_WEB", command: "connect-player", payload: { provider: provider.id } }, location.origin)}>Connect streaming tab</button><a href={provider.homeUrl} target="_blank" rel="noreferrer">Open {provider.name} ↗</a></div>
+          <div className="watch-player-art"><div className="watch-signal-rings"><i /><i /><i /><span>{player.paused ? "Ⅱ" : "▶"}</span></div><p>The movie stays in your {provider.name} tab.<br />This room carries only timing and social signals.</p></div>
+          <div className="watch-timeline"><span>{clock(player.currentTime)}</span><div><i style={{ width: `${progress}%` }} /></div><span>{player.duration ? clock(player.duration) : "--:--:--"}</span></div>
+          <div className="watch-player-actions"><button onClick={() => window.postMessage({ source: "TRENITH_WATCH_WEB", command: "connect-player", payload: { provider: provider.id } }, location.origin)}>Connect streaming tab</button><a href={provider.homeUrl} target="_blank" rel="noreferrer">Open {provider.name} ↗</a>{isHost && <button onClick={() => void resyncEveryone()} disabled={!player.connected}>Resync everyone</button>}{extensionState === "missing" && <Link href="/watch-together/supported#setup">Install the companion</Link>}</div>
         </div>
-        <div className="watch-video-section"><div className="watch-section-head"><div><span>LIVE LOUNGE</span><h2>Camera and voice</h2></div><small>{participants.length <= WATCH_MEDIA_PARTICIPANT_LIMIT ? `Peer-to-peer · ${relayAvailable ? "TURN recovery ready" : "direct connection"}` : `Media paused above ${WATCH_MEDIA_PARTICIPANT_LIMIT} people`}</small></div>
+        <div className="watch-video-section"><div className="watch-section-head"><div><span>LIVE LOUNGE</span><h2>Camera and voice</h2></div><small>{mediaAllowed ? `Peer-to-peer · ${relayAvailable ? "TURN recovery ready" : "direct connection"}` : `Media paused above ${WATCH_MEDIA_PARTICIPANT_LIMIT} people`}</small></div>
           <div className="watch-video-grid">
             <div className="watch-video-tile local">{localStream && cameraOn ? <WatchVideo stream={localStream} muted label="Your camera" /> : <div className="watch-avatar">{initials(self?.displayName || "You")}</div>}<footer><span>{self?.displayName || "You"} (you)</span><small>{micOn ? "Mic on" : "Muted"}</small></footer></div>
-            {Object.entries(remoteStreams).map(([participantId, stream]) => { const participant = participants.find((item) => item.id === participantId); return <div className="watch-video-tile" key={participantId}><WatchVideo stream={stream} label={`${participant?.displayName || "Guest"} camera`} /><footer><span>{participant?.displayName || "Guest"}</span><small>Connected</small></footer></div>; })}
-            {participants.filter((item) => item.id !== credentials.session.participantId && !remoteStreams[item.id]).slice(0, 5).map((participant) => <div className="watch-video-tile" key={participant.id}><div className="watch-avatar">{initials(participant.displayName)}</div><footer><span>{participant.displayName}</span><small>Camera off</small></footer></div>)}
+            {mediaTiles.slice(0, WATCH_MEDIA_PARTICIPANT_LIMIT - 1).map((participant) => {
+              const stream = remoteStreams[participant.id];
+              const media = peerMedia[participant.id];
+              const showVideo = stream && (media ? media.camera : stream.getVideoTracks().some((track) => track.enabled && !track.muted));
+              return <div className="watch-video-tile" key={participant.id}>{showVideo ? <WatchVideo stream={stream} label={`${participant.displayName} camera`} /> : <>{stream && <WatchVideo stream={stream} label={`${participant.displayName} audio`} hidden />}<div className="watch-avatar">{initials(participant.displayName)}</div></>}<footer><span>{participant.displayName}</span><small>{media?.microphone ? "Mic on" : stream ? "Muted" : "Camera off"}</small></footer></div>;
+            })}
           </div>
           <div className="watch-media-controls"><button className={micOn ? "active" : ""} disabled={mediaPending === "audio"} onClick={() => void addMedia("audio")}><span>{micOn ? "●" : "○"}</span>{mediaPending === "audio" ? "Allow access…" : micOn ? "Mute" : "Microphone"}</button><button className={cameraOn ? "active" : ""} disabled={mediaPending === "video"} onClick={() => void addMedia("video")}><span>▣</span>{mediaPending === "video" ? "Allow access…" : cameraOn ? "Stop camera" : "Camera"}</button><button onClick={() => void react("❤️")}><span>♡</span>React</button></div>{mediaError && <p className="watch-form-error">{mediaError}</p>}
         </div>
       </section>
-      <aside className="watch-social-panel"><div className="watch-social-tabs"><strong>Room</strong><span>{participants.length}/{25}</span></div><div className="watch-participant-list">{participants.map((participant) => <div key={participant.id}><span className="watch-small-avatar">{initials(participant.displayName)}</span><p><strong>{participant.displayName}{participant.id === credentials.session.participantId ? " · you" : ""}</strong><small>{participant.role === "host" ? "Host" : "Watching"}</small></p><i className="online" /></div>)}</div><div className="watch-chat" aria-live="polite">{chat.length === 0 && <div className="watch-chat-empty"><span>✦</span><strong>Say hello</strong><p>Messages are encrypted with the invitation key and expire from room storage.</p></div>}{chat.map((item) => { const sender = participants.find((participant) => participant.id === item.senderId); return <article key={item.id}><strong>{sender?.displayName || "Guest"}</strong><p>{item.text}</p><time>{new Date(item.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></article>; })}</div><div className="watch-reactions">{emojiChoices.map((emoji) => <button key={emoji} onClick={() => void react(emoji)} aria-label={`React ${emoji}`}>{emoji}</button>)}</div><form className="watch-chat-form" onSubmit={submitChat}><textarea value={message} onChange={(event) => setMessage(event.target.value)} maxLength={1000} placeholder="Message the room" rows={2} /><button disabled={!message.trim()} aria-label="Send message">↑</button></form></aside>
+      <aside className="watch-social-panel">
+        <div className="watch-social-tabs"><strong>Room</strong><span>{participants.length}/{WATCH_SYNC_PARTICIPANT_LIMIT}</span></div>
+        <div className="watch-participant-list">{participants.map((participant) => {
+          const status = participant.id === selfId ? (player.connected ? { currentTime: player.currentTime, playbackRate: player.playbackRate, paused: player.paused, sentAt: nowServer, contentKey: player.contentKey, connected: true, receivedAt: wallClock.local } : null) : peerStatus[participant.id] || null;
+          const stale = !clockReady || (status && wallClock.local - status.receivedAt > WATCH_STATUS_MS * 3);
+          const drift = participant.id === hostId ? null : describeDrift(stale ? null : status, referenceStatus, nowServer);
+          const differentTitle = status && referenceStatus && player.contentKey && status.contentKey && participant.id !== selfId && status.contentKey !== player.contentKey;
+          return <div key={participant.id} className={participant.id === hostId ? "is-host" : ""}><span className="watch-small-avatar">{initials(participant.displayName)}</span><p><strong>{participant.displayName}{participant.id === selfId ? " · you" : ""}</strong><small>{participant.id === hostId ? "Host" : "Watching"}{status && !stale ? ` · ${status.paused ? "Ⅱ" : "▶"} ${clock(projectPlaybackPosition(status, nowServer))}` : " · no player"}{differentTitle ? " · different title" : drift && drift.label !== "unknown" ? ` · ${drift.label === "in sync" ? "in sync" : drift.label === "paused" ? (status?.paused ? "paused" : "playing") : `${Math.abs(drift.seconds).toFixed(1)}s ${drift.label}`}` : ""}</small></p>{isHost && participant.id !== selfId ? <span className="watch-host-actions"><button onClick={() => void hostAction("transfer", participant)} title="Make host">★</button><button onClick={() => void hostAction("remove", participant)} title="Remove">×</button></span> : <i className={drift?.label === "in sync" || participant.id === hostId ? "online" : drift?.label === "unknown" ? "" : "drifting"} />}</div>;
+        })}</div>
+        <div className="watch-chat" aria-live="polite">{chat.length === 0 && <div className="watch-chat-empty"><span>✦</span><strong>Say hello</strong><p>Messages are encrypted with the invitation key and expire from room storage.</p></div>}{chat.map((item) => { if (item.system) return <article key={item.id} className="system"><p>{item.text}</p></article>; const sender = participants.find((participant) => participant.id === item.senderId); return <article key={item.id}><strong>{sender?.displayName || "Guest"}</strong><p>{item.text}</p><time>{new Date(item.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></article>; })}<div ref={chatEndRef} /></div>
+        <div className="watch-reactions">{emojiChoices.map((emoji) => <button key={emoji} onClick={() => void react(emoji)} aria-label={`React ${emoji}`}>{emoji}</button>)}</div>
+        <form className="watch-chat-form" onSubmit={submitChat}><textarea value={message} onChange={(event) => setMessage(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submitChat(event as unknown as FormEvent); } }} maxLength={1000} placeholder="Message the room" rows={2} /><button disabled={!message.trim()} aria-label="Send message">↑</button></form>
+      </aside>
     </main>
-    {reaction && <div key={reaction.id} className="watch-floating-reaction">{reaction.emoji}</div>}
+    {reactions.map((item) => <div key={item.id} className="watch-floating-reaction" style={{ left: `${item.left}%` }}>{item.emoji}</div>)}
     {error && <div className="watch-toast" role="status">{error}<button onClick={() => setError("")}>×</button></div>}
   </div>;
 }

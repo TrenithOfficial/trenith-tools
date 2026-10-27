@@ -1,6 +1,6 @@
 import { browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
-import type { ConnectionStatus, ExtensionMessage, PlayerStatus } from "../lib/messages";
+import { needsPageAdapter, type ConnectionStatus, type ExtensionMessage, type PlayerStatus } from "../lib/messages";
 
 let playerTabId: number | undefined;
 let lastStatus: PlayerStatus | undefined;
@@ -32,7 +32,7 @@ async function connectionStatus(): Promise<ConnectionStatus> {
 
 export default defineBackground(() => {
   browser.runtime.onInstalled.addListener(() => {
-    void browser.storage.local.set({ trenithWatchVersion: "1.0.2" });
+    void browser.storage.local.set({ trenithWatchVersion: "1.1.0" });
   });
 
   browser.tabs.onRemoved.addListener((tabId) => {
@@ -65,6 +65,14 @@ export default defineBackground(() => {
       const granted = await browser.permissions.contains({ origins: [originPattern] });
       if (!granted) return { installed: true, connected: false, error: "Site access was not granted. Trenith cannot control this player without it." } satisfies ConnectionStatus;
       try {
+        // Providers whose player rejects direct <video> control get an adapter
+        // in the page's own JavaScript world first, so the isolated player
+        // script can delegate seeks through the site's player API.
+        if (needsPageAdapter(url.hostname)) {
+          try {
+            await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["netflix-page.js"], world: "MAIN" } as Parameters<typeof browser.scripting.executeScript>[0]);
+          } catch { /* the HTML5 path still works without the adapter */ }
+        }
         await browser.scripting.executeScript({ target: { tabId: tab.id }, files: ["player-injected.js"] });
         playerTabId = tab.id;
         await browser.storage.session?.set({ playerTabId }).catch(() => undefined);

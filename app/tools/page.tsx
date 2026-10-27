@@ -6,8 +6,8 @@ import { tools } from "../../lib/catalog";
 import { alternateUrls, siteUrl } from "../../lib/site";
 
 export const metadata: Metadata = {
-  title: "All Free Online Tools — Audio, PDF, Image, SEO & AI",
-  description: "Browse 48 free Trenith tools: metadata removal, audio, video, PDF, image, music, SEO, developer utilities (password, hash, UUID, Base64) and BYOK AI. Private, in-browser processing with no sign-up — every listing opens a working workspace.",
+  title: "All Free Online Tools — Video, Audio, PDF, Image, SEO & AI",
+  description: `Browse ${tools.length} free Trenith tools: metadata removal, video and audio conversion, PDF, image, music, SEO, developer utilities (password, hash, UUID, Base64) and BYOK AI. Private, in-browser processing with no sign-up — every listing opens a working workspace.`,
   alternates: alternateUrls("/tools"),
 };
 
