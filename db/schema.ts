@@ -9,6 +9,7 @@ export const watchRooms = sqliteTable("watch_rooms", {
   createdAt: integer("created_at").notNull(),
   expiresAt: integer("expires_at").notNull(),
   endedAt: integer("ended_at"),
+  locked: integer("locked", { mode: "boolean" }).notNull().default(false),
 }, (table) => [index("watch_rooms_expires_idx").on(table.expiresAt)]);
 
 export const watchParticipants = sqliteTable("watch_participants", {
@@ -20,6 +21,7 @@ export const watchParticipants = sqliteTable("watch_participants", {
   joinedAt: integer("joined_at").notNull(),
   lastSeenAt: integer("last_seen_at").notNull(),
   active: integer("active", { mode: "boolean" }).notNull().default(true),
+  removed: integer("removed", { mode: "boolean" }).notNull().default(false),
 }, (table) => [
   index("watch_participants_room_idx").on(table.roomId),
   index("watch_participants_seen_idx").on(table.lastSeenAt),

@@ -1,12 +1,21 @@
 import { defineConfig } from "wxt";
 
+// The end-to-end harness (tests/e2e/watch-together.e2e.mjs) builds a separate
+// copy of the companion whose manifest pre-grants one stand-in streaming origin,
+// because Chrome's optional-permission prompt cannot be accepted by automation.
+// Nothing else differs, and the published build never reads these variables.
+const e2eHost = process.env.WXT_E2E_HOST || "";
+const outDir = process.env.WXT_OUT_DIR || ".output";
+
 export default defineConfig({
   srcDir: "extension",
   publicDir: "extension/public",
+  outDir,
   modules: ["@wxt-dev/module-react"],
   targetBrowsers: ["chrome", "firefox", "edge"],
   manifestVersion: 3,
   manifest: ({ browser }) => ({
+    ...(e2eHost ? { host_permissions: [e2eHost] } : {}),
     name: "Trenith Watch Together",
     short_name: "Trenith Watch",
     version: "1.1.0",
