@@ -45,6 +45,11 @@ export function WatchRoom({ roomId }: { roomId: string }) {
   const [participants, setParticipants] = useState<WatchParticipant[]>([]);
   const [hostId, setHostId] = useState<string | null>(null);
   const [locked, setLocked] = useState(false);
+  // True while the signaling service still runs protocol 1 (no roster host id,
+  // no sync-status events, no host controls). The room keeps working with the
+  // protocol-1 feature set instead of erroring on every status broadcast.
+  const [legacyService, setLegacyService] = useState(false);
+  const legacyServiceRef = useRef(false);
   const [controlMode, setControlMode] = useState<"host" | "everyone">("host");
   const [chat, setChat] = useState<ChatItem[]>([]);
   const [message, setMessage] = useState("");
@@ -268,20 +273,25 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         failures = 0;
         setConnectionState("connected");
         setParticipants(result.participants);
-        setLocked(result.locked);
-        setControlMode(result.controlMode);
-        setHostId(result.hostId);
-        hostIdRef.current = result.hostId;
+        // A protocol-1 room service answers without these fields; keep the
+        // values the session already knows rather than blanking them.
+        const legacy = result.hostId === undefined;
+        if (legacy !== legacyServiceRef.current) { legacyServiceRef.current = legacy; setLegacyService(legacy); }
+        setLocked(Boolean(result.locked));
+        setControlMode(result.controlMode ?? credentials.session.controlMode);
+        const nextHostId = result.hostId ?? result.participants.find((item) => item.role === "host")?.id ?? null;
+        setHostId(nextHostId);
+        hostIdRef.current = nextHostId;
         // Roster diffs become system lines so arrivals, departures and
         // handovers are visible without anyone typing.
         const nextIds = new Set(result.participants.map((item) => item.id));
         for (const participant of result.participants) if (!knownIds.has(participant.id) && participant.id !== credentials.session.participantId && knownIds.size) systemMessage(`${participant.displayName} joined`);
         for (const participant of participantsRef.current) if (!nextIds.has(participant.id) && participant.id !== credentials.session.participantId) systemMessage(`${participant.displayName} left`);
-        if (knownHost && result.hostId && result.hostId !== knownHost) {
-          const promoted = result.participants.find((item) => item.id === result.hostId);
-          systemMessage(result.hostId === credentials.session.participantId ? "You are now the host" : `${promoted?.displayName || "A participant"} is now the host`);
+        if (knownHost && nextHostId && nextHostId !== knownHost) {
+          const promoted = result.participants.find((item) => item.id === nextHostId);
+          systemMessage(nextHostId === credentials.session.participantId ? "You are now the host" : `${promoted?.displayName || "A participant"} is now the host`);
         }
-        knownHost = result.hostId;
+        knownHost = nextHostId;
         knownIds = nextIds;
         participantsRef.current = result.participants;
         const activeIds = new Set(result.participants.map((item) => item.id));
@@ -342,9 +352,13 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         const now = Date.now();
         // Everyone reports position for the roster; the controller additionally
         // re-broadcasts its position while playing so guests converge.
-        if (credentials && next.connected && now - lastStatusRef.current > WATCH_STATUS_MS - 300) {
+        if (credentials && next.connected && !legacyServiceRef.current && now - lastStatusRef.current > WATCH_STATUS_MS - 300) {
           lastStatusRef.current = now;
-          void broadcast({ type: "sync-status", currentTime: next.currentTime, paused: next.paused, playbackRate: next.playbackRate, contentKey: next.contentKey, connected: true, sentAt: serverNow() });
+          broadcast({ type: "sync-status", currentTime: next.currentTime, paused: next.paused, playbackRate: next.playbackRate, contentKey: next.contentKey, connected: true, sentAt: serverNow() }).catch((caught: unknown) => {
+            // A protocol-1 service rejects the kind; stop sending rather than
+            // failing every six seconds.
+            if ((caught as { status?: number }).status === 400) { legacyServiceRef.current = true; setLegacyService(true); }
+          });
         }
         const controller = hostIdRef.current ? hostIdRef.current === credentials?.session.participantId : false;
         if (credentials && controller && next.connected && !next.paused && now - lastHeartbeatRef.current > WATCH_HEARTBEAT_MS - 300 && !sendingRef.current) {
@@ -454,7 +468,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
         systemMessage(`${participant.displayName} was removed`);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The room action failed.");
+      setError((caught as { status?: number }).status === 404 ? "Host controls need the updated room service; ask Trenith to redeploy it." : caught instanceof Error ? caught.message : "The room action failed.");
     }
   }
 
@@ -466,7 +480,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
       await broadcast({ type: "room-locked", locked: result.locked });
       systemMessage(result.locked ? "You locked the room" : "You unlocked the room");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The room could not be locked.");
+      setError((caught as { status?: number }).status === 404 ? "Locking needs the updated room service; ask Trenith to redeploy it." : caught instanceof Error ? caught.message : "The room could not be locked.");
     }
   }
 
@@ -493,7 +507,8 @@ export function WatchRoom({ roomId }: { roomId: string }) {
   const mediaAllowed = participants.length <= WATCH_MEDIA_PARTICIPANT_LIMIT;
 
   return <div className="watch-room-shell">
-    <header className="watch-room-topbar"><div><span className={`watch-live-dot ${connectionState}`} /> <strong>{connectionState === "connected" ? "Room live" : connectionState === "removed" ? "Removed" : connectionState}</strong><span>{provider.name}</span><code>{roomId.slice(0, 6).toUpperCase()}</code>{locked && <span className="watch-lock-chip">Locked</span>}</div><div><button onClick={copyInvite} disabled={locked}>Copy invite</button>{isHost && <button onClick={() => void toggleLock()}>{locked ? "Unlock room" : "Lock room"}</button>}<Link href="/watch-together/supported">Setup help</Link><button className="watch-leave" onClick={() => void exit("leave")}>Leave</button>{isHost && <button className="watch-leave watch-end" onClick={() => void exit("end")}>End for everyone</button>}</div></header>
+    <header className="watch-room-topbar"><div><span className={`watch-live-dot ${connectionState}`} /> <strong>{connectionState === "connected" ? "Room live" : connectionState === "removed" ? "Removed" : connectionState}</strong><span>{provider.name}</span><code>{roomId.slice(0, 6).toUpperCase()}</code>{locked && <span className="watch-lock-chip">Locked</span>}</div><div><button onClick={copyInvite} disabled={locked}>Copy invite</button>{isHost && !legacyService && <button onClick={() => void toggleLock()}>{locked ? "Unlock room" : "Lock room"}</button>}<Link href="/watch-together/supported">Setup help</Link><button className="watch-leave" onClick={() => void exit("leave")}>Leave</button>{isHost && <button className="watch-leave watch-end" onClick={() => void exit("end")}>End for everyone</button>}</div></header>
+    {legacyService && connectionState === "connected" && <div className="watch-legacy-note">Room service update pending: play, pause and seek stay synchronized; the drift roster and host controls arrive once the service is redeployed.</div>}
     {connectionState === "ended" && <div className="watch-ended"><strong>This watch room has ended.</strong><Link href="/watch-together">Create another room</Link></div>}
     {connectionState === "removed" && <div className="watch-ended"><strong>The host removed you from this room.</strong><Link href="/watch-together">Create your own room</Link></div>}
     <main className="watch-room-grid">
@@ -524,7 +539,7 @@ export function WatchRoom({ roomId }: { roomId: string }) {
           const stale = !clockReady || (status && wallClock.local - status.receivedAt > WATCH_STATUS_MS * 3);
           const drift = participant.id === hostId ? null : describeDrift(stale ? null : status, referenceStatus, nowServer);
           const differentTitle = status && referenceStatus && player.contentKey && status.contentKey && participant.id !== selfId && status.contentKey !== player.contentKey;
-          return <div key={participant.id} className={participant.id === hostId ? "is-host" : ""}><span className="watch-small-avatar">{initials(participant.displayName)}</span><p><strong>{participant.displayName}{participant.id === selfId ? " · you" : ""}</strong><small>{participant.id === hostId ? "Host" : "Watching"}{status && !stale ? ` · ${status.paused ? "Ⅱ" : "▶"} ${clock(projectPlaybackPosition(status, nowServer))}` : " · no player"}{differentTitle ? " · different title" : drift && drift.label !== "unknown" ? ` · ${drift.label === "in sync" ? "in sync" : drift.label === "paused" ? (status?.paused ? "paused" : "playing") : `${Math.abs(drift.seconds).toFixed(1)}s ${drift.label}`}` : ""}</small></p>{isHost && participant.id !== selfId ? <span className="watch-host-actions"><button onClick={() => void hostAction("transfer", participant)} title="Make host">★</button><button onClick={() => void hostAction("remove", participant)} title="Remove">×</button></span> : <i className={drift?.label === "in sync" || participant.id === hostId ? "online" : drift?.label === "unknown" ? "" : "drifting"} />}</div>;
+          return <div key={participant.id} className={participant.id === hostId ? "is-host" : ""}><span className="watch-small-avatar">{initials(participant.displayName)}</span><p><strong>{participant.displayName}{participant.id === selfId ? " · you" : ""}</strong><small>{participant.id === hostId ? "Host" : "Watching"}{status && !stale ? ` · ${status.paused ? "Ⅱ" : "▶"} ${clock(projectPlaybackPosition(status, nowServer))}` : " · no player"}{differentTitle ? " · different title" : drift && drift.label !== "unknown" ? ` · ${drift.label === "in sync" ? "in sync" : drift.label === "paused" ? (status?.paused ? "paused" : "playing") : `${Math.abs(drift.seconds).toFixed(1)}s ${drift.label}`}` : ""}</small></p>{isHost && !legacyService && participant.id !== selfId ? <span className="watch-host-actions"><button onClick={() => void hostAction("transfer", participant)} title="Make host">★</button><button onClick={() => void hostAction("remove", participant)} title="Remove">×</button></span> : <i className={drift?.label === "in sync" || participant.id === hostId ? "online" : drift?.label === "unknown" ? "" : "drifting"} />}</div>;
         })}</div>
         <div className="watch-chat" aria-live="polite">{chat.length === 0 && <div className="watch-chat-empty"><span>✦</span><strong>Say hello</strong><p>Messages are encrypted with the invitation key and expire from room storage.</p></div>}{chat.map((item) => { if (item.system) return <article key={item.id} className="system"><p>{item.text}</p></article>; const sender = participants.find((participant) => participant.id === item.senderId); return <article key={item.id}><strong>{sender?.displayName || "Guest"}</strong><p>{item.text}</p><time>{new Date(item.sentAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time></article>; })}<div ref={chatEndRef} /></div>
         <div className="watch-reactions">{emojiChoices.map((emoji) => <button key={emoji} onClick={() => void react(emoji)} aria-label={`React ${emoji}`}>{emoji}</button>)}</div>

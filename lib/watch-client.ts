@@ -6,9 +6,11 @@ export type RoomEventResponse = {
   events: WatchEncryptedEvent[];
   participants: WatchRoomSession["participants"];
   serverTime: number;
-  hostId: string | null;
-  locked: boolean;
-  controlMode: "host" | "everyone";
+  // Absent from a protocol-1 room service; the room page falls back to the
+  // roster roles and the session's control mode.
+  hostId?: string | null;
+  locked?: boolean;
+  controlMode?: "host" | "everyone";
 };
 
 type IceResponse = { iceServers: RTCIceServer[]; relay: boolean };
