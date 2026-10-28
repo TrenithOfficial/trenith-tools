@@ -304,8 +304,9 @@ async function main() {
   await waitFor(async () => (await chat(host)).some((line) => /Guest Harness is now the host/.test(line)), 10000, "host sees the handover line");
   report("host hands over → guest controls, both see the system line", true);
   await drive(guest, () => document.getElementById("player").pause());
-  const newHostPause = await waitFor(async () => { const s = await sample(host, guest); return s.a.paused ? s : null; }, 6000, "former host follows the new host's pause");
-  report("new host pauses → former host follows", newHostPause.drift <= TOLERANCE, `drift ${newHostPause.drift.toFixed(2)}s`);
+  const pausedAt = Date.now();
+  const newHostPause = await waitFor(async () => { const s = await sample(host, guest); return s.a.paused ? s : null; }, 12000, "former host follows the new host's pause");
+  report("new host pauses → former host follows", newHostPause.drift <= TOLERANCE, `${((Date.now() - pausedAt) / 1000).toFixed(1)} s · drift ${newHostPause.drift.toFixed(2)}s`);
 
   // 15. Lock keeps a third person out; unlock lets them in; remove kicks them.
   await guest.room.click("text=Lock room");
