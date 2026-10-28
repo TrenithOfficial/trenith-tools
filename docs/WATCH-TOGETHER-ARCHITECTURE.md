@@ -114,6 +114,10 @@ The adapter searches document and open shadow roots for visible `video`/`audio` 
 - A host who leaves hands over immediately; a host silent past the 45-second presence window is replaced by the longest-present active guest on the next poll.
 - Hosts can transfer, remove a guest (the guest's token stops working and their next poll is told `removed`, since the host's REST call usually lands before the mirrored `kick` event can be read) and lock the room (new joins receive HTTP 423). Chat shows joins, departures, handovers and lock changes as system lines.
 
+## Rolling out protocol 2
+
+The site and the worker deploy separately. A protocol-2 room page against a protocol-1 worker keeps play/pause/seek, heartbeat, chat and voice working (verified with `E2E_LEGACY=1 npm run test:e2e:watch` against the previous worker source); it detects the missing roster fields, stops sending `sync-status`, hides host controls and shows "Room service update pending" until `npm run watch:deploy` runs. A protocol-1 room page against a protocol-2 worker ignores the extra fields. Deploy in either order; redeploy the worker promptly so rooms get the drift roster and host controls.
+
 ## End-to-end verification
 
 `npm run test:e2e:watch` (see README) drives the shipped companion in two real Chromium profiles against `next start` and `wrangler dev --local`, with a stand-in HTML5 player standing in for a provider. The only non-production element is a separate extension build whose manifest pre-grants the stand-in origin, because Chrome's optional-permission prompt cannot be accepted by automation. Measured on 27 October 2026: seek landed 0.02 s apart, 8 s of playback drifted 0.08 s, a stalled guest re-converged to 0.17 s, automatic promotion took 45 s, and after six minutes with both room tabs hidden the poll cadence was still ~500 ms with a post-soak seek landing in 0.5 s.

@@ -839,3 +839,5 @@ h1 em,h2 em { color: #77727d; }
 .output-panel .chip.active { color: #fff; background: var(--accent); border-color: var(--accent); }
 .output-panel .editor-group { margin-top: 10px; }
 .field-hint { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.5; font-weight: 500; }
+
+.watch-legacy-note { margin: 0 0 12px; padding: 10px 14px; border: 1px solid rgba(182, 100, 0, .35); border-radius: 12px; background: rgba(182, 100, 0, .08); color: var(--text); font-size: 13px; line-height: 1.5; }

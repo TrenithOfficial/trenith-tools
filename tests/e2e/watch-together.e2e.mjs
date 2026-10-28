@@ -31,6 +31,11 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const root = path.resolve(here, "../..");
 const HEADED = Boolean(process.env.E2E_HEADED);
 const SOAK_MINUTES = Number(process.env.E2E_SOAK_MINUTES || 0);
+// E2E_LEGACY=1 runs the new site against a protocol-1 signaling service (the
+// version deployed before this release): play/pause/seek, chat and voice must
+// still work and the room must say that host controls are pending, while the
+// protocol-2-only steps are skipped.
+const LEGACY = Boolean(process.env.E2E_LEGACY);
 const SIGNAL = process.env.E2E_SIGNAL || "http://127.0.0.1:8787";
 const BASE = process.env.E2E_BASE || "http://127.0.0.1:3101";
 const OTT_PORT = Number(process.env.E2E_OTT_PORT || 3200);
@@ -95,7 +100,7 @@ async function startInfrastructure() {
     await waitForHttp(`${BASE}/watch-together`, 90000, "site");
   }
   const health = await (await fetch(`${BASE}/api/watch/health`)).json();
-  report("site proxies to the signaling worker", health.status === "ok" && health.protocolVersion === 2, `protocol ${health.protocolVersion}`);
+  report("site proxies to the signaling worker", health.status === "ok" && health.protocolVersion === (LEGACY ? 1 : 2), `protocol ${health.protocolVersion}`);
 }
 
 // --- Participants ---------------------------------------------------------------
@@ -254,9 +259,14 @@ async function main() {
   report("guest pausing locally does not stop the host (host-only control)", hostUnaffected);
   report("host heartbeat resumes the stalled guest and re-converges", true, `drift ${pulledBack.drift.toFixed(2)}s`);
 
-  // 11. Roster drift labels.
-  await waitFor(async () => (await roster(host)).some((row) => /Guest Harness.*in sync/.test(row)), 12000, "host roster shows the guest in sync");
-  report("roster shows the guest as in sync with the host", true, (await roster(host)).join(" | "));
+  // 11. Roster drift labels (protocol 2) or the honest pending notice (protocol 1).
+  if (LEGACY) {
+    await host.room.waitForSelector(".watch-legacy-note", { timeout: 15000 });
+    report("a protocol-1 service is detected and the room says host controls are pending", true, await host.room.$eval(".watch-legacy-note", (node) => node.textContent.slice(0, 80)));
+  } else {
+    await waitFor(async () => (await roster(host)).some((row) => /Guest Harness.*in sync/.test(row)), 12000, "host roster shows the guest in sync");
+    report("roster shows the guest as in sync with the host", true, (await roster(host)).join(" | "));
+  }
 
   // 12. Encrypted chat both ways.
   await sendChat(host, "hello from the host");
@@ -273,6 +283,20 @@ async function main() {
     return live && tiles.some((text) => /Host Harness.*Mic on/.test(text)) ? { tiles } : null;
   }), 20000, "guest receives the host's audio track");
   report("microphone stream arrives peer-to-peer and the tile shows Mic on", true, voice.tiles.join(" | "));
+
+  if (LEGACY) {
+    // Protocol-2 host controls do not exist on the old service; end here.
+    await guest.context.close();
+    await rm(guest.dir, { recursive: true, force: true });
+    await host.room.click("text=End for everyone");
+    await host.room.waitForURL(/\/watch-together$/, { timeout: 15000 });
+    report("host ends the room on the protocol-1 service", true);
+    const legacyErrors = [...host.errors].filter((line) => !/favicon|net::ERR_|Failed to load resource/.test(line));
+    report("no page errors against the protocol-1 service", legacyErrors.length === 0, legacyErrors.slice(0, 3).join(" | "));
+    await host.context.close();
+    await rm(host.dir, { recursive: true, force: true });
+    return;
+  }
 
   // 14. Host transfer: the guest becomes the controller.
   await host.room.click('.watch-host-actions button[title="Make host"]');
