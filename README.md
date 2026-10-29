@@ -62,7 +62,7 @@ E2E_SOAK_MINUTES=6 npm run test:e2e:watch
 
 It launches two Chromium profiles with the real companion installed, the room pages from `next start`, the signaling worker on a local D1 (`wrangler dev --local`), and a stand-in streaming site with a plain HTML5 player. It checks play/seek/pause/rate following within the 750 ms tolerance, the host heartbeat pulling back a stalled guest, roster drift labels, encrypted chat, WebRTC voice, handover, lock, remove, automatic host promotion, and (with the soak) that hidden room tabs keep polling at full cadence under Chrome's background throttling.
 
-Use two Vercel projects from this repository:
+One project can serve both hostnames: `proxy.ts` sends each page a self-referencing `Link: rel="canonical"` header chosen by the request host, and the HTML carries the shared hreflang pair. Two projects (below) additionally localise the sitemap, robots host and locale:
 
 | Project | Variables |
 | --- | --- |

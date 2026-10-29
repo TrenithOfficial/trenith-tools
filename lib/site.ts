@@ -13,9 +13,18 @@ export function siteUrl(path = "/") {
   return new URL(path, `${configured}/`).toString();
 }
 
+// A self-referencing canonical is required for hreflang to count. When a
+// deployment is region-specific (NEXT_PUBLIC_SITE_URL set, one project per
+// hostname as docs/SEARCH-SETUP.md describes) it goes in the HTML. When one
+// build serves both hostnames the HTML cannot differ per host, so the
+// canonical is sent as a `Link: <…>; rel="canonical"` response header chosen
+// by the request host in next.config.ts, and the HTML tag is left out so the
+// two signals can never disagree.
+export const regionConfigured = Boolean(process.env.NEXT_PUBLIC_SITE_URL?.trim());
+
 export function alternateUrls(path = "/") {
   return {
-    canonical: siteUrl(path),
+    ...(regionConfigured ? { canonical: siteUrl(path) } : {}),
     languages: {
       "en": new URL(path, `${GLOBAL_SITE_URL}/`).toString(),
       "en-IN": new URL(path, `${INDIA_SITE_URL}/`).toString(),

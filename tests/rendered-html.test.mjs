@@ -132,3 +132,18 @@ test("the saved accent palette is applied before paint and social previews are 1
     assert.ok(size > 10_000 && size < 200_000, `${name}.jpg is a real image (${size} bytes)`);
   }
 });
+
+test("each hostname gets a self-referencing canonical header and the HTML carries only hreflang", async () => {
+  for (const [host, path] of [["tools.trenith.com", "/"], ["tools.trenith.in", "/"], ["tools.trenith.in", "/tools/video-converter"], ["trenith-tools.vercel.app", "/guides"]]) {
+    const response = await worker.fetch(new Request(`https://${host}${path}`, { headers: { accept: "text/html", host } }), environment, context);
+    const expectedHost = host === "tools.trenith.in" ? "tools.trenith.in" : "tools.trenith.com";
+    assert.equal(response.headers.get("link"), `<https://${expectedHost}${path}>; rel="canonical"`, `${host}${path}`);
+    const html = await response.text();
+    assert.doesNotMatch(html, /<link rel="canonical"/, "no HTML canonical when one build serves both hostnames");
+    assert.match(html, /hrefLang="en-IN" href="https:\/\/tools\.trenith\.in/);
+  }
+  for (const path of ["/api/tools", "/sitemap.xml", "/og/default.jpg"]) {
+    const response = await worker.fetch(new Request(`https://tools.trenith.in${path}`, { headers: { host: "tools.trenith.in" } }), environment, context);
+    assert.equal(response.headers.get("link"), null, `${path} carries no canonical`);
+  }
+});

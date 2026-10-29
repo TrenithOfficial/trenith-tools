@@ -19,7 +19,7 @@ Use two Vercel projects from the same `TrenithOfficial/trenith-tools` repository
 4. Add `tools.trenith.in` and create the exact DNS record Vercel displays.
 5. Deploy and confirm the canonical on the India homepage points to `https://tools.trenith.in/` and hreflang includes both domains.
 
-Attaching both hostnames to one build is not recommended because a static build cannot emit a different self-canonical for each host.
+Both hostnames currently share one Vercel project. That works: `proxy.ts` sends a `Link: <…>; rel="canonical"` response header chosen by the request host, so every page on each hostname is self-canonical (Google and Bing honour header canonicals) while the HTML carries the shared hreflang pair. Region-specific projects (steps 1–2) remain the richer setup — they also localise the sitemap, robots host and `og:locale` — and when `NEXT_PUBLIC_SITE_URL` is set the HTML canonical returns and agrees with the header.
 
 ## 3. Google Search Console
 
