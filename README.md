@@ -137,7 +137,7 @@ Optional worker configuration (set with `wrangler secret put <NAME> -c wrangler.
 | `WATCH_ADMIN_SECRET` | Enables the manual-approval endpoint below |
 | `RESEND_API_KEY` | Optional: email the access key / confirmation to requesters |
 | `WATCH_ACCESS_EMAIL_FROM` | Verified Resend sender for access emails |
-| `WATCH_ACCESS_EMAIL_TO` | Address notified of each new pending request |
+| `WATCH_ACCESS_EMAIL_TO` | Address(es) notified of each new pending request — comma-separated, so the review email reaches an inbox someone acts on |
 
 Host controls (bearer token of the current host): `POST /api/watch/rooms/:id/transfer` `{participantId}`, `POST /api/watch/rooms/:id/remove` `{participantId}`, `POST /api/watch/rooms/:id/lock` `{locked}`. The roster poll returns `hostId`, `locked` and `controlMode`; a removed participant's next poll answers `403 {"code":"removed"}` so their page can say so; a host silent for longer than the 45-second presence window is replaced by the longest-present guest automatically. The `locked` and `removed` columns are added to existing databases by self-applied migrations (`drizzle/0002_*.sql` is the reference).
 

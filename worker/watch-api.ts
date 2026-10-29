@@ -37,7 +37,7 @@ export type WatchApiEnv = {
   WATCH_ADMIN_SECRET?: string;          // enables POST /access/approve for manual review
   RESEND_API_KEY?: string;              // optional: email the access key / confirmation
   WATCH_ACCESS_EMAIL_FROM?: string;     // verified Resend sender
-  WATCH_ACCESS_EMAIL_TO?: string;       // where new pending requests are notified
+  WATCH_ACCESS_EMAIL_TO?: string;       // where new pending requests are notified (comma-separated list allowed)
   WATCH_PROXY_SECRET?: string;          // shared with the Vercel proxy so it can assert the real client IP
   WATCH_REVIEW_URL?: string;            // review page for email Approve/Reject links (defaults to tools.trenith.com)
 };
@@ -506,12 +506,15 @@ function sendAccessEmail(ctx: WatchExecutionCtx | undefined, env: WatchApiEnv, t
   if (!env.RESEND_API_KEY) { console.warn("[watch-email] skipped: RESEND_API_KEY not set"); return; }
   if (!to) { console.warn("[watch-email] skipped: empty recipient (WATCH_ACCESS_EMAIL_TO unset?)"); return; }
   const from = env.WATCH_ACCESS_EMAIL_FROM || "Trenith Watch Together <onboarding@resend.dev>";
+  // WATCH_ACCESS_EMAIL_TO may list several inboxes ("support@…, sai@…") so a
+  // pending request is seen by someone who acts on it.
+  const recipients = to.split(",").map((address) => address.trim()).filter(Boolean).slice(0, 10);
   const work = (async () => {
     try {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: { "content-type": "application/json", authorization: `Bearer ${env.RESEND_API_KEY}` },
-        body: JSON.stringify({ from, to: [to], subject, text, ...(html ? { html } : {}) }),
+        body: JSON.stringify({ from, to: recipients, subject, text, ...(html ? { html } : {}) }),
       });
       if (!res.ok) {
         const detail = await res.text().catch(() => "");
